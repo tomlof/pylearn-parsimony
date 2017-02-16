@@ -43,12 +43,15 @@ except ValueError:
 
 
 __all__ = ["BaseNetwork", "FeedForwardNetwork",
+           "BaseLayer", "InputLayer", "HiddenLayer", "OutputLayer",
+           "BaseNode", "InputNode", "ActivationNode", "OutputNode",
+           "IdentityNode", "LogisticNode", "TanhNode", "ReluNode",
+           "BaseLoss", "SquaredSumLoss", "BinaryCrossEntropyLoss",
+           "CategoricalCrossEntropyLoss"]
 
-           "BaseNode"]
 
-
-def init_weights(num_output, num_input):
-    return (0.01 / np.abs(num_output - num_input)) * \
+def _init_weights(num_output, num_input):
+    return (0.01 / np.sqrt(num_output + num_input)) * \
         np.random.randn(num_output, num_input)
 
 
@@ -57,37 +60,62 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
                                  properties.Gradient)):
     """This is the base class for all neural networks.
     """
-    def __init__(self, input_size, loss):
+    def __init__(self, loss, input_size=None, output_size=None):
 
-        self._layers = [InputLayer(input_size)]
+        self._input = InputLayer(num_nodes=input_size)
+        self._layers = []
+        self._output = OutputLayer(num_nodes=output_size)
+        self._loss = loss
 
-        self.loss = loss
+        self._input.connect_next(self._output)
+        self._output.connect_prev(self._input)
+
+    def reset(self):
+        # self._input = InputLayer(num_nodes=self._input.num_nodes())
+        self._input.connect_next(None)
+        self._layers = []
+        self._output = OutputLayer(num_nodes=self._output.num_nodes())
 
     def add_layer(self, layer):
 
-        self._layers[-1].connect_next(layer)  # Connect last layer to this
-        layer.connect_prev(self._layers[-1])  # Connect this layer to last
+        self._output.connect_prev(None)
+
+        if len(self._layers) == 0:
+
+            self._input.connect_next(layer)  # Connect input layer to this
+            layer.connect_prev(self._input)  # Connect this layer to input
+        else:
+            self._layers[-1].connect_next(layer)  # Connect last layer to this
+            layer.connect_prev(self._layers[-1])  # Connect this layer to last
 
         self._layers.append(layer)
+        self._output.connect_prev(self._layers[-1])
 
 #        return len(self._layers) - 1  # Return index of the layer
+
+    def set_target(self, target):
+
+        self._loss.set_target(target)
+
+#    def set_output(self, output_size):
+#        self.output = OutputLayer(num_input_nodes=-1,
+#                                  num_output_nodes=output_size)
 
 
 class FeedForwardNetwork(BaseNetwork):
 
-    def __init__(self, input_size, loss):
-
-        self._layers = [InputLayer(input_size)]
-
-        self.loss = loss
-
     def f(self, x):
+        x = x.T  # The network needs the samples in the rows.
+
+        x = self._input.forward(x)  # Should just be the identity.
         num_layers = len(self._layers)
         for i in range(num_layers):
             layer = self._layers[i]
             x = layer.forward(x)
 
-        loss = self.loss.f(x)
+        x = self._output.forward(x)
+
+        loss = self._loss.f(x)
 
         return loss
 
@@ -95,20 +123,17 @@ class FeedForwardNetwork(BaseNetwork):
         pass  # Implement!
 
 
-class BaseLayer(with_metaclass(abc.ABCMeta), object):
+class BaseLayer(with_metaclass(abc.ABCMeta)):
     """This is the base class for all layers.
     """
-    def __init__(self, num_input_nodes=1, num_output_nodes=1, nodes=None,
-                 weights=None):
+    def __init__(self, num_nodes=None, nodes=None, weights=None):
 
+        self._num_nodes = num_nodes
         self._nodes = nodes
-        self._num_input_nodes = num_input_nodes
-        self._num_output_nodes = num_output_nodes
-
-        if weights is None:
-            self._weights = init_weights(num_output_nodes, num_input_nodes)
-        else:
+        if weights is not None:
             self._weights = np.asarray(weights)
+        else:
+            self._weights = weights
 
         self._all_same = True
         if isinstance(nodes, list):
@@ -117,25 +142,22 @@ class BaseLayer(with_metaclass(abc.ABCMeta), object):
         self._prev_layer = None
         self._next_layer = None
 
+    def num_nodes(self):
+
+        return self._num_nodes
+
     def connect_next(self, layer):
 
-        if self._num_output_nodes == layer._num_input_nodes:
-            self._next_layer = layer
-        else:
-            raise ValueError("Node mismatch! Number of output nodes %d, "
-                             "number of input nodes %d!"
-                             % (self._num_output_nodes,
-                                layer._num_input_nodes))
+        self._next_layer = layer
 
     def connect_prev(self, layer):
 
-        if self._num_input_nodes == layer._num_output_nodes:
-            self._prev_layer = layer
-        else:
-            raise ValueError("Node mismatch! Number of input nodes %d, "
-                             "number of output nodes %d!"
-                             % (self._num_input_nodes,
-                                layer._num_output_nodes))
+        self._prev_layer = layer
+
+        if layer is None:
+            self._weights = None
+        elif self._weights is None:
+            self._weights = _init_weights(self.num_nodes(), layer.num_nodes())
 
     def forward(self, inputs):
 
@@ -157,10 +179,9 @@ class BaseLayer(with_metaclass(abc.ABCMeta), object):
 class InputLayer(BaseLayer):
     """Represents an input layer.
     """
-    def __init__(self, num_output_nodes=1):
+    def __init__(self, num_nodes=None):
 
-        super(InputLayer, self).__init__(num_input_nodes=0,
-                                         num_output_nodes=num_output_nodes,
+        super(InputLayer, self).__init__(num_nodes=num_nodes,
                                          nodes=IdentityNode(),
                                          weights=1)
 
@@ -176,17 +197,17 @@ class InputLayer(BaseLayer):
 class HiddenLayer(BaseLayer):
     """Represents a hidden layer.
     """
-    def __init__(self, num_input_nodes=1, num_output_nodes=1, nodes=None):
-
-        super(BaseLayer, self).__init__(num_input_nodes=num_input_nodes,
-                                        num_output_nodes=num_output_nodes,
-                                        nodes=nodes)
+    pass
 
 
-class OutputLayer(HiddenLayer):
+class OutputLayer(BaseLayer):
     """Represents an output layer.
     """
-    pass
+    def __init__(self, num_nodes=None, nodes=None, weights=None):
+
+        super(OutputLayer, self).__init__(num_nodes=num_nodes,
+                                          nodes=OutputNode(),
+                                          weights=weights)
 
 
 class BaseNode(with_metaclass(abc.ABCMeta,
@@ -220,7 +241,7 @@ class InputNode(BaseNode):
         return 0.0  # These do not depend on the weights.
 
 
-class ActivationNode(BaseNode):
+class ActivationNode(with_metaclass(abc.ABCMeta, BaseNode)):
     """This is the base class for all nodes in the network that have activation
     functions.
     """
@@ -231,7 +252,14 @@ class OutputNode(ActivationNode):
     """This is the base class for all nodes in the network that are output
     nodes.
     """
-    pass
+    def f(self, x):
+        return x
+
+    def derivative(self, x):
+        if isinstance(np.ndarray):
+            return np.ones(x.shape)
+        else:
+            return 1.0
 
 
 class IdentityNode(ActivationNode):
@@ -303,10 +331,16 @@ class BaseLoss(with_metaclass(abc.ABCMeta,
     """This is the base class for all losses in the network.
     """
     def __init__(self, target=None):
-        if target is not None:
-            self.set_target(target)
+        self.set_target(target)
 
     def set_target(self, target):
+
+        if target is not None:
+            if len(target.shape) != 2:
+                raise ValueError("The target must be of shape 1-by-k.")
+            if target.shape[0] != 1:
+                target = target.reshape((1, np.prod(target.shape)))
+
         self.target = target
 
 
@@ -316,9 +350,13 @@ class SquaredSumLoss(BaseLoss):
         f(x) = (1 / 2) * \sum_{i=1}^n (x_i - t_i)².
     """
     def f(self, x):
+        x = x.T  # The network assumes the samples are in the rows.
+
         return (1.0 / 2.0) * np.sum((x - self.target) ** 2.0)
 
     def derivative(self, x):
+        x = x.T  # The network assumes the samples are in the rows.
+
         return (x - self.target)
 
 
@@ -328,10 +366,14 @@ class BinaryCrossEntropyLoss(BaseLoss):
         f(x) = \sum_{i=1}^n -t_i * log(x_i) - (1 - t_i) * log(1 - x_i).
     """
     def f(self, x):
+        x = x.T  # The network assumes the samples are in the rows.
+
         return -np.sum(np.multiply(self.target, np.log(x)) +
                        np.multiply(1.0 - self.target, np.log(1.0 - x)))
 
     def derivative(self, x):
+        x = x.T  # The network assumes the samples are in the rows.
+
         return np.divide(x - self.target, np.multiply(x, 1.0 - x))
 
 
@@ -341,9 +383,13 @@ class CategoricalCrossEntropyLoss(BaseLoss):
         f(x) = -\sum_{i=1}^n t_i * log(x_i).
     """
     def f(self, x):
+        x = x.T  # The network assumes the samples are in the rows.
+
         return -np.sum(np.multiply(self.target, np.log(x)))
 
     def derivative(self, x):
+        x = x.T  # The network assumes the samples are in the rows.
+
         return -np.divide(self.target, x)
 
 
