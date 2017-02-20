@@ -108,6 +108,7 @@ class FeedForwardNetwork(BaseNetwork):
         x = x.T  # The network needs the samples in the rows.
 
         x = self._input.forward(x)  # Should just be the identity.
+
         num_layers = len(self._layers)
         for i in range(num_layers):
             layer = self._layers[i]
@@ -120,13 +121,18 @@ class FeedForwardNetwork(BaseNetwork):
         return loss
 
     def grad(self, x):
+
+        target = self._loss.get_target()
+
+        delta_output = self._output.backward()
+
         pass  # Implement!
 
 
 class BaseLayer(with_metaclass(abc.ABCMeta)):
     """This is the base class for all layers.
     """
-    def __init__(self, num_nodes=None, nodes=None, weights=None):
+    def __init__(self, num_nodes=None, nodes=None, weights=None, biases=None):
 
         self._num_nodes = num_nodes
         self._nodes = nodes
@@ -134,6 +140,10 @@ class BaseLayer(with_metaclass(abc.ABCMeta)):
             self._weights = np.asarray(weights)
         else:
             self._weights = weights
+        if biases is not None:
+            self._biases = np.asarray(biases)
+        else:
+            self._biases = biases
 
         self._all_same = True
         if isinstance(nodes, list):
@@ -161,13 +171,16 @@ class BaseLayer(with_metaclass(abc.ABCMeta)):
 
     def forward(self, inputs):
 
-        Wx = np.dot(self._weights, inputs)
+        if self._biases is not None:
+            Wx_b = np.dot(self._weights, inputs) + self._biases
+        else:
+            Wx_b = np.dot(self._weights, inputs)
         if self._all_same:
-            outputs = self._nodes.f(Wx)
+            outputs = self._nodes.f(Wx_b)
         else:
             outputs = np.zeros((self._num_output_nodes, 1))
             for i in range(self._num_output_nodes):
-                outputs[i] = self._nodes[i].f(Wx[i])
+                outputs[i] = self._nodes[i].f(Wx_b[i])
 
         return outputs
 
@@ -203,11 +216,17 @@ class HiddenLayer(BaseLayer):
 class OutputLayer(BaseLayer):
     """Represents an output layer.
     """
-    def __init__(self, num_nodes=None, nodes=None, weights=None):
+    def __init__(self, num_nodes=None, nodes=None, loss=None, weights=None):
 
         super(OutputLayer, self).__init__(num_nodes=num_nodes,
                                           nodes=OutputNode(),
                                           weights=weights)
+
+        self.set_loss(loss)
+
+    def backward(self, grads):
+
+        return grads  # Delta for the output layer (identity function)
 
 
 class BaseNode(with_metaclass(abc.ABCMeta,
@@ -331,6 +350,7 @@ class BaseLoss(with_metaclass(abc.ABCMeta,
     """This is the base class for all losses in the network.
     """
     def __init__(self, target=None):
+
         self.set_target(target)
 
     def set_target(self, target):
@@ -342,6 +362,10 @@ class BaseLoss(with_metaclass(abc.ABCMeta,
                 target = target.reshape((1, np.prod(target.shape)))
 
         self.target = target
+
+    def get_target(self):
+
+        return self.target
 
 
 class SquaredSumLoss(BaseLoss):
