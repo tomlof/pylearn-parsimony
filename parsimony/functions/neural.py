@@ -60,25 +60,27 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
                                  properties.Gradient)):
     """This is the base class for all neural networks.
     """
-    def __init__(self, loss, input_size=None, output_size=None):
+    def __init__(self, loss, input_size=None, cache_activations=True):  # , output_size=None):
 
         self._input = InputLayer(num_nodes=input_size)
         self._layers = []
-        self._output = OutputLayer(num_nodes=output_size)
+#        self._output = OutputLayer(num_nodes=output_size)
         self._loss = loss
 
-        self._input.connect_next(self._output)
-        self._output.connect_prev(self._input)
+        self.cache_activations = bool(cache_activations)
+
+        self._input.connect_next(None)
+#        self._output.connect_prev(self._input)
 
     def reset(self):
         # self._input = InputLayer(num_nodes=self._input.num_nodes())
         self._input.connect_next(None)
         self._layers = []
-        self._output = OutputLayer(num_nodes=self._output.num_nodes())
+#        self._output = OutputLayer(num_nodes=self._output.num_nodes())
 
     def add_layer(self, layer):
 
-        self._output.connect_prev(None)
+#        self._output.connect_prev(None)
 
         if len(self._layers) == 0:
 
@@ -88,8 +90,10 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
             self._layers[-1].connect_next(layer)  # Connect last layer to this
             layer.connect_prev(self._layers[-1])  # Connect this layer to last
 
+        layer.connect_next(None)  # Make last layer
+
         self._layers.append(layer)
-        self._output.connect_prev(self._layers[-1])
+#        self._output.connect_prev(self._layers[-1])
 
 #        return len(self._layers) - 1  # Return index of the layer
 
@@ -101,11 +105,32 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
 #        self.output = OutputLayer(num_input_nodes=-1,
 #                                  num_output_nodes=output_size)
 
+    def forward(self):
+        pass
+
+    def backward(self):
+        pass
+
 
 class FeedForwardNetwork(BaseNetwork):
 
     def f(self, x):
         x = x.T  # The network needs the samples in the rows.
+
+        y = self.forward(x)
+
+        E = self._loss.f(y)
+
+        return E
+
+    def grad(self, x):
+
+#        if not self.cache_activations:
+#            self.f(x)
+
+        pass  # Implement!
+
+    def forward(self, x):
 
         x = self._input.forward(x)  # Should just be the identity.
 
@@ -114,19 +139,14 @@ class FeedForwardNetwork(BaseNetwork):
             layer = self._layers[i]
             x = layer.forward(x)
 
-        x = self._output.forward(x)
-
-        loss = self._loss.f(x)
-
-        return loss
-
-    def grad(self, x):
+    def backward(self, x):
 
         target = self._loss.get_target()
 
-        delta_output = self._output.backward()
-
-        pass  # Implement!
+        if len(self._layers) == 0:
+            delta_output = self._loss.derivative(x)
+        else:
+            delta_output = self._loss.derivative(self._layers[-1].get_activation())
 
 
 class BaseLayer(with_metaclass(abc.ABCMeta)):
@@ -152,6 +172,9 @@ class BaseLayer(with_metaclass(abc.ABCMeta)):
         self._prev_layer = None
         self._next_layer = None
 
+    def reset(self):
+        self._cached_Wx_b = None
+
     def num_nodes(self):
 
         return self._num_nodes
@@ -171,16 +194,18 @@ class BaseLayer(with_metaclass(abc.ABCMeta)):
 
     def forward(self, inputs):
 
+        Wx = np.dot(self._weights, inputs)
         if self._biases is not None:
-            Wx_b = np.dot(self._weights, inputs) + self._biases
+            self._cached_Wx_b = Wx + self._biases
         else:
-            Wx_b = np.dot(self._weights, inputs)
+            self._cached_Wx_b = Wx
+
         if self._all_same:
-            outputs = self._nodes.f(Wx_b)
+            outputs = self._nodes.f(self._cached_Wx_b)
         else:
             outputs = np.zeros((self._num_output_nodes, 1))
             for i in range(self._num_output_nodes):
-                outputs[i] = self._nodes[i].f(Wx_b[i])
+                outputs[i] = self._nodes[i].f(self._cached_Wx_b[i])
 
         return outputs
 
@@ -213,20 +238,20 @@ class HiddenLayer(BaseLayer):
     pass
 
 
-class OutputLayer(BaseLayer):
-    """Represents an output layer.
-    """
-    def __init__(self, num_nodes=None, nodes=None, loss=None, weights=None):
-
-        super(OutputLayer, self).__init__(num_nodes=num_nodes,
-                                          nodes=OutputNode(),
-                                          weights=weights)
-
-        self.set_loss(loss)
-
-    def backward(self, grads):
-
-        return grads  # Delta for the output layer (identity function)
+#class OutputLayer(BaseLayer):
+#    """Represents an output layer.
+#    """
+#    def __init__(self, num_nodes=None, nodes=None, loss=None, weights=None):
+#
+#        super(OutputLayer, self).__init__(num_nodes=num_nodes,
+#                                          nodes=OutputNode(),
+#                                          weights=weights)
+#
+#        self.set_loss(loss)
+#
+#    def backward(self, grads):
+#
+#        return grads  # Delta for the output layer (identity function)
 
 
 class BaseNode(with_metaclass(abc.ABCMeta,
@@ -267,18 +292,18 @@ class ActivationNode(with_metaclass(abc.ABCMeta, BaseNode)):
     pass
 
 
-class OutputNode(ActivationNode):
-    """This is the base class for all nodes in the network that are output
-    nodes.
-    """
-    def f(self, x):
-        return x
-
-    def derivative(self, x):
-        if isinstance(np.ndarray):
-            return np.ones(x.shape)
-        else:
-            return 1.0
+#class OutputNode(ActivationNode):
+#    """This is the base class for all nodes in the network that are output
+#    nodes.
+#    """
+#    def f(self, x):
+#        return x
+#
+#    def derivative(self, x):
+#        if isinstance(np.ndarray):
+#            return np.ones(x.shape)
+#        else:
+#            return 1.0
 
 
 class IdentityNode(ActivationNode):
@@ -374,14 +399,20 @@ class SquaredSumLoss(BaseLoss):
         f(x) = (1 / 2) * \sum_{i=1}^n (x_i - t_i)².
     """
     def f(self, x):
+
         x = x.T  # The network assumes the samples are in the rows.
 
-        return (1.0 / 2.0) * np.sum((x - self.target) ** 2.0)
+        n = float(x.size)
+
+        return (0.5 * n) * np.sum((x - self.target) ** 2.0)
 
     def derivative(self, x):
+
         x = x.T  # The network assumes the samples are in the rows.
 
-        return (x - self.target)
+        n = float(x.size)
+
+        return (x - self.target) / n
 
 
 class BinaryCrossEntropyLoss(BaseLoss):
