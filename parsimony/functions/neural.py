@@ -60,7 +60,7 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
                                  properties.Gradient)):
     """This is the base class for all neural networks.
     """
-    def __init__(self, loss, input_size=None, cache_activations=True):  # , output_size=None):
+    def __init__(self, loss, input_size=None, cache_activations=True):
 
         self._input = InputLayer(num_nodes=input_size)
         self._layers = []
@@ -73,14 +73,11 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
 #        self._output.connect_prev(self._input)
 
     def reset(self):
-        # self._input = InputLayer(num_nodes=self._input.num_nodes())
         self._input.connect_next(None)
         self._layers = []
 #        self._output = OutputLayer(num_nodes=self._output.num_nodes())
 
     def add_layer(self, layer):
-
-#        self._output.connect_prev(None)
 
         if len(self._layers) == 0:
 
@@ -93,7 +90,6 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
         layer.connect_next(None)  # Make last layer
 
         self._layers.append(layer)
-#        self._output.connect_prev(self._layers[-1])
 
 #        return len(self._layers) - 1  # Return index of the layer
 
@@ -141,12 +137,14 @@ class FeedForwardNetwork(BaseNetwork):
 
     def backward(self, x):
 
-        target = self._loss.get_target()
-
-        if len(self._layers) == 0:
-            delta_output = self._loss.derivative(x)
+        n_layers = len(self._layers)
+        delta = [0] * n_layers
+        if n_layers == 0:
+            delta[n_layers - 1] = self._loss.derivative(x)
         else:
-            delta_output = self._loss.derivative(self._layers[-1].get_activation())
+            a = self._layers[-1].get_activation()
+            delta[n_layers - 1] = self._loss.derivative(a)
+            delta[n_layers - 1] = np.multiply(delta[n_layers - 1], )
 
 
 class BaseLayer(with_metaclass(abc.ABCMeta)):
@@ -173,7 +171,7 @@ class BaseLayer(with_metaclass(abc.ABCMeta)):
         self._next_layer = None
 
     def reset(self):
-        self._cached_Wx_b = None
+        self._activation = None
 
     def num_nodes(self):
 
@@ -192,20 +190,28 @@ class BaseLayer(with_metaclass(abc.ABCMeta)):
         elif self._weights is None:
             self._weights = _init_weights(self.num_nodes(), layer.num_nodes())
 
+    def get_output(self):
+
+        return self._output
+
+    def get_activation(self):
+
+        return self._activation
+
     def forward(self, inputs):
 
         Wx = np.dot(self._weights, inputs)
         if self._biases is not None:
-            self._cached_Wx_b = Wx + self._biases
+            self._input = Wx + self._biases
         else:
-            self._cached_Wx_b = Wx
+            self._input = Wx
 
         if self._all_same:
-            outputs = self._nodes.f(self._cached_Wx_b)
+            outputs = self._nodes.f(self._input)
         else:
             outputs = np.zeros((self._num_output_nodes, 1))
             for i in range(self._num_output_nodes):
-                outputs[i] = self._nodes[i].f(self._cached_Wx_b[i])
+                outputs[i] = self._nodes[i].f(self._input[i])
 
         return outputs
 
@@ -404,7 +410,7 @@ class SquaredSumLoss(BaseLoss):
 
         n = float(x.size)
 
-        return (0.5 * n) * np.sum((x - self.target) ** 2.0)
+        return (0.5 / n) * np.sum((x - self.target) ** 2.0)
 
     def derivative(self, x):
 
