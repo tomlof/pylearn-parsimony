@@ -26,6 +26,7 @@ try:
     from . import properties  # Only works when imported as a package.
 except ValueError:
     import parsimony.functions.properties as properties  # Run as a script.
+from parsimony.utils import check_arrays
 #try:
 #    from . import combinedfunctions  # Only works when imported as a package.
 #except ValueError:
@@ -60,91 +61,133 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
                                  properties.Gradient)):
     """This is the base class for all neural networks.
     """
-    def __init__(self, loss, input_size=None, cache_activations=True):
+    def __init__(self, X, y, loss):
 
-        self._input = InputLayer(num_nodes=input_size)
+        X, y = check_arrays(X, y)
+
+        self.X = X
+        self.y = y
+        self._input = InputLayer(num_nodes=X.shape[1])
         self._layers = []
-#        self._output = OutputLayer(num_nodes=output_size)
-        self._loss = loss
+        self._output = OutputLayer(loss)
 
-        self.cache_activations = bool(cache_activations)
+        loss.set_target(y)
 
-        self._input.connect_next(None)
-#        self._output.connect_prev(self._input)
+        self.reset()
 
     def reset(self):
-        self._input.connect_next(None)
+        self._input.connect_next(self._output)
+        self._output.connect_prev(self._input)
         self._layers = []
-#        self._output = OutputLayer(num_nodes=self._output.num_nodes())
 
     def add_layer(self, layer):
 
         if len(self._layers) == 0:
-
-            self._input.connect_next(layer)  # Connect input layer to this
+            self._input.connect_next(layer)  # Connect input to this layer
             layer.connect_prev(self._input)  # Connect this layer to input
         else:
             self._layers[-1].connect_next(layer)  # Connect last layer to this
             layer.connect_prev(self._layers[-1])  # Connect this layer to last
 
-        layer.connect_next(None)  # Make last layer
+        layer.connect_next(self._output)  # Connect this layer to output
+        self._output.connect_prev(layer)  # Connect output to this layer
 
         self._layers.append(layer)
 
-#        return len(self._layers) - 1  # Return index of the layer
+    def set_weights(self, weights):
 
-    def set_target(self, target):
+        for i in range(len(self._layers)):
+            self._layers[i].set_weights(weights[i])
 
-        self._loss.set_target(target)
+    @abc.abstractmethod
+    def _forward(self, X):
+        raise NotImplementedError('Abstract method "_forward" must be '
+                                  'specialised!')
 
-#    def set_output(self, output_size):
-#        self.output = OutputLayer(num_input_nodes=-1,
-#                                  num_output_nodes=output_size)
-
-    def forward(self):
-        pass
-
-    def backward(self):
-        pass
+    @abc.abstractmethod
+    def _backward(self, y):
+        raise NotImplementedError('Abstract method "_backward" must be '
+                                  'specialised!')
 
 
 class FeedForwardNetwork(BaseNetwork):
 
-    def f(self, x):
-        x = x.T  # The network needs the samples in the rows.
+    def f(self, W):
 
-        y = self.forward(x)
+        self.set_weights(W)
 
-        E = self._loss.f(y)
+#        y = self._forward()
+#        E = self._loss.f(y)
+        E = self._output._forward(self.X)
 
         return E
 
-    def grad(self, x):
+    def grad(self, W):
 
-#        if not self.cache_activations:
-#            self.f(x)
+        self.set_weights(W)
 
-        pass  # Implement!
-
-    def forward(self, x):
-
-        x = self._input.forward(x)  # Should just be the identity.
-
-        num_layers = len(self._layers)
-        for i in range(num_layers):
-            layer = self._layers[i]
-            x = layer.forward(x)
-
-    def backward(self, x):
+        y = self._forward(self.X)  # Compute network output.
+        self._backward(y)  # Compute deltas (recall: last delta is fron loss).
 
         n_layers = len(self._layers)
-        delta = [0] * n_layers
-        if n_layers == 0:
-            delta[n_layers - 1] = self._loss.derivative(x)
+        grad = [0.0] * n_layers
+        for i in range(n_layers):
+#            ai = self._layers[i].get_activation()  # ai = gi(Wi * aj)
+#            delta = self._layers[i].get_delta()  # Delta from layer above
+#            grad[i] = np.dot(delta, ai.T)
+            grad[i] = self._layers[i].get_grad()
+
+        return grad
+
+    def _forward(self, X):
+
+#        y = self._input._forward(self.X, W[0])  # Should just be the identity
+#
+#        num_layers = len(self._layers)
+#        for i in range(num_layers):
+#            layer = self._layers[i]
+#            y = layer._forward(y)
+
+        num_layers = len(self._layers)
+        if num_layers == 0:
+            y = self._input._forward(X)  # Last layer's output
         else:
-            a = self._layers[-1].get_activation()
-            delta[n_layers - 1] = self._loss.derivative(a)
-            delta[n_layers - 1] = np.multiply(delta[n_layers - 1], )
+            y = self._layers[num_layers - 1]._forward(X)  # Last layer's output
+
+        return y
+
+    def _backward(self, y):
+
+        # grad_W2 0.5 * norm(y - x)**2
+        #       = (y - a2) * 0
+
+        # z2 = W2 * a1 + b2
+        # a2 = g_2(z2)
+        # grad_W2 0.5 * norm(y - a2)**2
+        #       = (y - a2) * d a2/ dW2
+        #       = (y - a2) * g_2'(z2) * d z2 / dW2
+        #       = (y - a2) * g_2'(W2 * a1 + b2) * a1
+
+#        n_layers = len(self._layers)
+#        delta = [0.0] * (n_layers + 1)
+#
+#        delta[n_layers] = self._loss.derivative(y)
+#
+#        if n_layers == 0:
+#            delta[n_layers - 1] = 0.0
+#        else:
+#            z = self._layers[-1].get_signal()  # z = W * a + b
+#            d = self._layers[-1].derivative(z)  # g'(z)
+#            delta[n_layers - 1] = np.multiply(delta[n_layers], d)
+#
+#        for i in range(n_layers - 2, -1, -1):
+#            z = self._layers[i].get_signal()  # z = W * a + b
+#            d = self._layers[i].derivative(z)  # g'(z)
+#            delta[i] = np.multiply(delta[i + 1], d)
+
+        num_layers = len(self._layers)
+        if num_layers > 0:
+            self._layers[0]._backward(y)  # First layer computes backward step
 
 
 class BaseLayer(with_metaclass(abc.ABCMeta)):
@@ -154,10 +197,7 @@ class BaseLayer(with_metaclass(abc.ABCMeta)):
 
         self._num_nodes = num_nodes
         self._nodes = nodes
-        if weights is not None:
-            self._weights = np.asarray(weights)
-        else:
-            self._weights = weights
+        self.set_weights(weights)
         if biases is not None:
             self._biases = np.asarray(biases)
         else:
@@ -171,7 +211,10 @@ class BaseLayer(with_metaclass(abc.ABCMeta)):
         self._next_layer = None
 
     def reset(self):
+        self._signal = None
         self._activation = None
+        self._delta = None
+        self._grad = None
 
     def num_nodes(self):
 
@@ -190,34 +233,72 @@ class BaseLayer(with_metaclass(abc.ABCMeta)):
         elif self._weights is None:
             self._weights = _init_weights(self.num_nodes(), layer.num_nodes())
 
-    def get_output(self):
+    def get_weights(self):
 
-        return self._output
+        return self._weights
+
+    def set_weights(self, weights):
+
+        self._weights = weights
+
+    def get_signal(self):
+
+        return self._signal
 
     def get_activation(self):
 
         return self._activation
 
-    def forward(self, inputs):
+    def get_derivative(self, z=None):
 
-        Wx = np.dot(self._weights, inputs)
-        if self._biases is not None:
-            self._input = Wx + self._biases
-        else:
-            self._input = Wx
+        if z is not None:
+            if self._all_same:
+                self._derivative = self._nodes.f(z)
+            else:
+                self._derivative = np.zeros((self._num_nodes, z.shape[1]))
+                for i in range(self._num_nodes):
+                    self._derivative[i, :] = self._nodes[i].f(z[i, :])
+
+        return self._derivative
+
+    def get_delta(self):
+
+        return self._delta
+
+    def get_grad(self):
+
+        return self._grad
+
+    def _forward(self, X):
+
+        a = self._prev_layer._forward(X)
+        self._signal = np.dot(self._weights, a)
 
         if self._all_same:
-            outputs = self._nodes.f(self._input)
+            self._activation = self._nodes.f(self._signal)
         else:
-            outputs = np.zeros((self._num_output_nodes, 1))
-            for i in range(self._num_output_nodes):
-                outputs[i] = self._nodes[i].f(self._input[i])
+            self._activation = np.zeros((self._num_nodes, 1))
+            for i in range(self._num_nodes):
+                self._activation[i] = self._nodes[i].f(self._signal[i])
 
-        return outputs
+        return self._activation
 
-    def backward(self, grads):
+    def _backward(self, y):
 
-        pass  # TODO: implement!!
+        # Compute delta in above layers
+        delta2 = self._next_layer._backward(y)
+
+        # Compute delta in this layer
+        W = self.get_weights()
+        z = self.get_signal()
+        d = self.get_derivative(z)
+        self._delta = np.multiply(np.dot(W.T, delta2), d)
+
+        # Compute gradient
+        a = self.get_activation()  # ai = gi(Wi * aj)
+        self._grad = np.dot(delta2, a.T)
+
+        return self._delta
 
 
 class InputLayer(BaseLayer):
@@ -227,15 +308,15 @@ class InputLayer(BaseLayer):
 
         super(InputLayer, self).__init__(num_nodes=num_nodes,
                                          nodes=IdentityNode(),
-                                         weights=1)
+                                         weights=1.0)
 
     def connect_prev(self, layer):
 
         raise ValueError("Cannot add a previous layer to the input layer!")
 
-    def forward(self, inputs):
+    def _forward(self, X):
 
-        return inputs
+        return X
 
 
 class HiddenLayer(BaseLayer):
@@ -244,20 +325,36 @@ class HiddenLayer(BaseLayer):
     pass
 
 
-#class OutputLayer(BaseLayer):
-#    """Represents an output layer.
-#    """
-#    def __init__(self, num_nodes=None, nodes=None, loss=None, weights=None):
-#
-#        super(OutputLayer, self).__init__(num_nodes=num_nodes,
-#                                          nodes=OutputNode(),
-#                                          weights=weights)
-#
-#        self.set_loss(loss)
-#
-#    def backward(self, grads):
-#
-#        return grads  # Delta for the output layer (identity function)
+class OutputLayer(BaseLayer):
+    """Represents the output layer.
+    """
+    def __init__(self, loss):
+
+        super(OutputLayer, self).__init__(num_nodes=1,
+                                          nodes=None,
+                                          weights=1.0)
+
+        self.set_loss(loss)
+
+    def set_loss(self, loss):
+
+        self._loss = loss
+
+    def connect_next(self, layer):
+
+        raise ValueError("Cannot add a next layer to the output layer!")
+
+    def _forward(self, X):
+
+        y = self._prev_layer._forward(X)
+
+        return self._loss.f(y)
+
+    def _backward(self, y):
+
+        delta = self._loss.derivative(y)
+
+        return delta
 
 
 class BaseNode(with_metaclass(abc.ABCMeta,
@@ -406,7 +503,7 @@ class SquaredSumLoss(BaseLoss):
     """
     def f(self, x):
 
-        x = x.T  # The network assumes the samples are in the rows.
+        x = x.reshape(self.target.shape)
 
         n = float(x.size)
 
