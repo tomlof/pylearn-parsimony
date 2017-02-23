@@ -50,9 +50,6 @@ class LinearRegression(properties.CompositeFunction,
         y : numpy array (n-by-1)
             The regressand vector.
 
-        k : float
-            Non-negative float. The ridge parameter.
-
         mean : bool
             Whether to compute the squared loss or the mean squared loss.
             Default is True, the mean squared loss.
