@@ -60,27 +60,26 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
                                  properties.Function,
                                  properties.Gradient)):
     """This is the base class for all neural networks.
+
+    Parameters
+    ----------
+    X : numpy.ndarray, shape (n-by-p)
+        The training data.
+
+    y : numpy.ndarray, shape (n-by-q)
+        The example outputs.
+
+    output : parsimony.neural.BaseNode or list of parsimony.neural.BaseNode
+        The nodes of the ourput layer. If passed a BaseNode, then all nodes
+        of the output layer are of this type; if passed a list of
+        BaseNodes, then each node's type is given by the corresponding
+        element in the list.
+
+    loss : parsimony.neural.BaseLoss
+        The loss function of the network.
     """
     def __init__(self, X, y, output, loss):
-        """The base class for neural networks.
 
-        Parameters
-        ----------
-        X : numpy.ndarray, shape (n-by-p)
-            The training data.
-
-        y : numpy.ndarray, shape (n-by-q)
-            The example outputs.
-
-        output : parsimony.neural.BaseNode or list of parsimony.neural.BaseNode
-            The nodes of the ourput layer. If passed a BaseNode, then all nodes
-            of the output layer are of this type; if passed a list of
-            BaseNodes, then each node's type is given by the corresponding
-            element in the list.
-
-        loss : parsimony.neural.BaseLoss
-            The loss function of the network.
-        """
         X, y = check_arrays(X, y)
 
         self.X = X
@@ -94,6 +93,10 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
         self.reset()
 
     def reset(self):
+        """Free any cached computations from previous use of this Function.
+
+        From the interface "Function".
+        """
         self._input.connect_next(self._output)
         self._output.connect_prev(self._input)
         self._layers = []
@@ -143,7 +146,10 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
 class FeedForwardNetwork(BaseNetwork):
 
     def f(self, W):
+        """The value of the network as a function of its weights.
 
+        From the interface "Function".
+        """
         self.set_weights(W)
 
         output = self._output._forward(self.X.T)
@@ -152,7 +158,13 @@ class FeedForwardNetwork(BaseNetwork):
         return E
 
     def grad(self, W):
+        """The gradient of the network as a function of its weights.
 
+        Parameters
+        ----------
+        W : list of numpy.ndarray, num_layers of shape (num_output, num_input)
+            The point at which to evaluate the gradient.
+        """
         self.set_weights(W)
 
         output = self._forward(self.X.T)  # Compute network output
@@ -161,9 +173,6 @@ class FeedForwardNetwork(BaseNetwork):
         n_layers = len(self._layers)
         grad = [0.0] * (n_layers + 1)
         for i in range(n_layers):
-#            ai = self._layers[i].get_activation()  # ai = gi(Wi * aj)
-#            delta = self._layers[i].get_delta()  # Delta from layer above
-#            grad[i] = np.dot(delta, ai.T)
             grad[i] = self._layers[i].get_grad()
 
         grad[-1] = self._output.get_grad()
@@ -175,7 +184,7 @@ class FeedForwardNetwork(BaseNetwork):
 
         Parameters
         ----------
-        W : list of numpy.ndarray, list of shape (num_samples, num_output)
+        W : list of numpy.ndarray, list of shape (num_output, num_input)
             The point at which to evaluate the gradient.
 
         eps : float
@@ -215,12 +224,7 @@ class FeedForwardNetwork(BaseNetwork):
         y : numpy.ndarray, shape (num_output_nodes, num_samples)
             The output examples.
         """
-#        num_layers = len(self._layers)
-#        if num_layers == 0:
         y = self._output._forward(X)  # Last layer's output
-#        else:
-#            last_layer = self._layers[-1]
-#            y = last_layer._forward(X)  # Last layer's output
 
         return y
 
@@ -232,23 +236,6 @@ class FeedForwardNetwork(BaseNetwork):
         y : numpy.ndarray, shape (num_output_nodes, num_samples)
             The output examples.
         """
-#        n_layers = len(self._layers)
-#        delta = [0.0] * (n_layers + 1)
-#
-#        delta[n_layers] = self._loss.derivative(y)
-#
-#        if n_layers == 0:
-#            delta[n_layers - 1] = 0.0
-#        else:
-#            z = self._layers[-1].get_signal()  # z = W * a + b
-#            d = self._layers[-1].derivative(z)  # g'(z)
-#            delta[n_layers - 1] = np.multiply(delta[n_layers], d)
-#
-#        for i in range(n_layers - 2, -1, -1):
-#            z = self._layers[i].get_signal()  # z = W * a + b
-#            d = self._layers[i].derivative(z)  # g'(z)
-#            delta[i] = np.multiply(delta[i + 1], d)
-
         num_layers = len(self._layers)
         if num_layers > 0:
             first_layer = self._layers[0]
@@ -278,6 +265,7 @@ class BaseLayer(with_metaclass(abc.ABCMeta)):
 
         self._signal = None
         self._activation = None
+        self._derivative = None
         self._delta = None
         self._grad = None
 
@@ -322,11 +310,11 @@ class BaseLayer(with_metaclass(abc.ABCMeta)):
 
         if z is not None:
             if self._all_same:
-                self._derivative = self._nodes.f(z)
+                self._derivative = self._nodes.derivative(z)
             else:
                 self._derivative = np.zeros((self._num_nodes, z.shape[1]))
                 for i in range(self._num_nodes):
-                    self._derivative[i, :] = self._nodes[i].f(z[i, :])
+                    self._derivative[i, :] = self._nodes[i].derivative(z[i, :])
 
         return self._derivative
 
@@ -470,12 +458,15 @@ class InputNode(BaseNode):
     nodes.
     """
     def __init__(self, x):
+
         self.x = x
 
     def f(self, x):
+
         return self.x
 
     def derivative(self, x):
+
         return 0.0  # These do not depend on the weights.
 
 
@@ -486,30 +477,18 @@ class ActivationNode(with_metaclass(abc.ABCMeta, BaseNode)):
     pass
 
 
-#class OutputNode(ActivationNode):
-#    """This is the base class for all nodes in the network that are output
-#    nodes.
-#    """
-#    def f(self, x):
-#        return x
-#
-#    def derivative(self, x):
-#        if isinstance(np.ndarray):
-#            return np.ones(x.shape)
-#        else:
-#            return 1.0
-
-
 class IdentityNode(ActivationNode):
     """A node where the activation function is the identity:
 
         f(x) = x.
     """
     def f(self, x):
+
         return x
 
     def derivative(self, x):
-        if isinstance(np.ndarray):
+
+        if isinstance(x, np.ndarray):
             return np.ones(x.shape)
         else:
             return 1.0
@@ -522,12 +501,14 @@ class LogisticNode(ActivationNode):
         f(x) = 1 / (1 + exp(-x)).
     """
     def f(self, x):
+
         if isinstance(x, np.ndarray):
             return np.reciprocal(1.0 + np.exp(-x))
         else:
             return 1.0 / (1.0 + np.exp(-x))
 
     def derivative(self, x):
+
         f = self.f(x)
         if isinstance(x, np.ndarray):
             return np.multiply(f, 1.0 - f)
@@ -541,12 +522,14 @@ class TanhNode(ActivationNode):
         f(x) = tanh(x) = (2 / (1 + exp(-2x))) - 1.
     """
     def f(self, x):
-        if isinstance(np.ndarray):
+
+        if isinstance(x, np.ndarray):
             return 2.0 * np.reciprocal(1.0 + np.exp(-2.0 * x)) - 1.0
         else:
             return (2.0 / (1.0 + np.exp(-2.0 * x))) - 1.0
 
     def derivative(self, x):
+
         f = self.f(x)
         return 1.0 - (f ** 2.0)
 
@@ -557,10 +540,12 @@ class ReluNode(ActivationNode):
         f(x) = max(0, x).
     """
     def f(self, x):
-        return np.maximum(0, x)
+
+        return np.maximum(0.0, x)
 
     def derivative(self, x):
-        return np.sign(np.maximum(0, x))
+
+        return np.sign(np.maximum(0.0, x))
 
 
 class BaseLoss(with_metaclass(abc.ABCMeta,
@@ -601,13 +586,11 @@ class BinaryCrossEntropyLoss(BaseLoss):
         f(x) = \sum_{i=1}^n -t_i * log(x_i) - (1 - t_i) * log(1 - x_i).
     """
     def f(self, x):
-        x = x.T  # The network assumes the samples are in the rows.
 
         return -np.sum(np.multiply(self.target, np.log(x)) +
                        np.multiply(1.0 - self.target, np.log(1.0 - x)))
 
     def derivative(self, x):
-        x = x.T  # The network assumes the samples are in the rows.
 
         return np.divide(x - self.target, np.multiply(x, 1.0 - x))
 
@@ -618,12 +601,10 @@ class CategoricalCrossEntropyLoss(BaseLoss):
         f(x) = -\sum_{i=1}^n t_i * log(x_i).
     """
     def f(self, x):
-        x = x.T  # The network assumes the samples are in the rows.
 
         return -np.sum(np.multiply(self.target, np.log(x)))
 
     def derivative(self, x):
-        x = x.T  # The network assumes the samples are in the rows.
 
         return -np.divide(self.target, x)
 
