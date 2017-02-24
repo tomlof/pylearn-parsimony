@@ -16,8 +16,6 @@ Copyright (c) 2013-2017, CEA/DSV/I2BM/Neurospin. All rights reserved.
 @license: BSD 3-clause.
 """
 import abc
-import copy
-import types
 from six import with_metaclass
 
 import numpy as np
@@ -26,7 +24,11 @@ try:
     from . import properties  # Only works when imported as a package.
 except ValueError:
     import parsimony.functions.properties as properties  # Run as a script.
-from parsimony.utils import check_arrays
+try:
+    from . import step_sizes  # Only works when imported as a package.
+except ValueError:
+    import parsimony.functions.step_sizes as step_sizes  # Run as a script.
+
 #try:
 #    from . import combinedfunctions  # Only works when imported as a package.
 #except ValueError:
@@ -40,14 +42,16 @@ from parsimony.utils import check_arrays
 #except ValueError:
 #    import parsimony.functions.multiblock.properties as multiblockprops  # Run as a script.
 #import parsimony.utils as utils
-#import parsimony.utils.consts as consts
+
+from parsimony.utils import check_arrays
+import parsimony.utils.consts as consts
 
 
 __all__ = ["BaseNetwork", "FeedForwardNetwork",
            "BaseLayer", "InputLayer", "HiddenLayer", "OutputLayer",
-           "BaseNode", "InputNode", "ActivationNode", "OutputNode",
-           "IdentityNode", "LogisticNode", "TanhNode", "ReluNode",
-           "BaseLoss", "SquaredSumLoss", "BinaryCrossEntropyLoss",
+           "BaseNode", "InputNode", "ActivationNode", "IdentityNode",
+           "LogisticNode", "TanhNode", "ReluNode", "BaseLoss",
+           "SquaredSumLoss", "BinaryCrossEntropyLoss",
            "CategoricalCrossEntropyLoss"]
 
 
@@ -58,7 +62,8 @@ def _init_weights(num_output, num_input):
 
 class BaseNetwork(with_metaclass(abc.ABCMeta,
                                  properties.Function,
-                                 properties.Gradient)):
+                                 properties.Gradient,
+                                 properties.StepSize)):
     """This is the base class for all neural networks.
 
     Parameters
@@ -78,7 +83,8 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
     loss : parsimony.neural.BaseLoss
         The loss function of the network.
     """
-    def __init__(self, X, y, output, loss):
+    def __init__(self, X, y, output, loss,
+                 step_size=step_sizes.ConstantStepSize(0.01)):
 
         X, y = check_arrays(X, y)
 
@@ -90,6 +96,8 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
 
         loss.set_target(y.T)  # Note: The network outputs column vectors
 
+        self._step_size = step_size
+
         self.reset()
 
     def reset(self):
@@ -100,6 +108,7 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
         self._input.connect_next(self._output)
         self._output.connect_prev(self._input)
         self._layers = []
+        self._step_size.reset()
 
     def add_layer(self, layer):
 
@@ -179,6 +188,10 @@ class FeedForwardNetwork(BaseNetwork):
 
         return grad
 
+    def step(self, W, iteration=None, **kwargs):
+
+        return self._step_size.step(W, iteration=iteration, **kwargs)
+
     def approx_grad(self, W, eps=1e-4):
         """Numerical approximation of the gradient.
 
@@ -250,8 +263,7 @@ class BaseLayer(with_metaclass(abc.ABCMeta)):
     """
     def __init__(self, num_nodes=None, nodes=None, weights=None):
 
-        self._num_nodes = num_nodes
-        self._nodes = nodes
+        self._set_nodes(nodes, num_nodes)
         self.set_weights(weights)
 
         self._all_same = True
@@ -268,6 +280,31 @@ class BaseLayer(with_metaclass(abc.ABCMeta)):
         self._derivative = None
         self._delta = None
         self._grad = None
+
+    def _set_nodes(self, nodes, num_nodes):
+
+        if isinstance(nodes, list):
+
+            if (num_nodes is not None) and (len(nodes) != num_nodes):
+                raise ValueError("num_nodes and len(nodes) does not agree!")
+
+            has_softmax = False
+            for node in nodes:
+                if isinstance(node, SoftmaxNode):
+                    has_softmax = True
+                    break
+            if has_softmax:
+                for node in nodes:
+                    if not isinstance(node, SoftmaxNode):
+                        raise ValueError("If any node is SoftmaxNode, then all"
+                                         "nodes must be SoftmaxNode.")
+
+            self._num_nodes = len(nodes)
+            self._nodes = nodes
+
+        else:
+            self._num_nodes = int(num_nodes)
+            self._nodes = nodes
 
     def get_num_nodes(self):
 
@@ -516,36 +553,60 @@ class LogisticNode(ActivationNode):
             return f * (1.0 - f)
 
 
-class TanhNode(ActivationNode):
-    """A node where the activation function is the hyperbolic tangent function:
+class SoftmaxNode(ActivationNode):
+    """A node where the activation function is the softmax function:
 
-        f(x) = tanh(x) = (2 / (1 + exp(-2x))) - 1.
+        f(x) = exp(zi) / sum_j exp(zj).
     """
     def f(self, x):
 
         if isinstance(x, np.ndarray):
-            return 2.0 * np.reciprocal(1.0 + np.exp(-2.0 * x)) - 1.0
+            # x = x - np.max(x)
+            # TODO: Unsafe! May overflow! Fix!
+            return np.exp(x) / np.sum(np.exp(x))
         else:
-            return (2.0 / (1.0 + np.exp(-2.0 * x))) - 1.0
+            return np.exp(x) / np.sum(np.exp(x))
 
     def derivative(self, x):
 
-        f = self.f(x)
-        return 1.0 - (f ** 2.0)
+#        f = self.f(x)
+#        if isinstance(x, np.ndarray):
+#            return np.multiply(f, 1.0 - f)
+#        else:
+#            return f * (1.0 - f)
+        pass
 
 
-class ReluNode(ActivationNode):
-    """A node where the activation function is a rectified linear unit:
-
-        f(x) = max(0, x).
-    """
-    def f(self, x):
-
-        return np.maximum(0.0, x)
-
-    def derivative(self, x):
-
-        return np.sign(np.maximum(0.0, x))
+#class TanhNode(ActivationNode):
+#    """A node where the activation function is the hyperbolic tangent function:
+#
+#        f(x) = tanh(x) = (2 / (1 + exp(-2x))) - 1.
+#    """
+#    def f(self, x):
+#
+#        if isinstance(x, np.ndarray):
+#            return 2.0 * np.reciprocal(1.0 + np.exp(-2.0 * x)) - 1.0
+#        else:
+#            return (2.0 / (1.0 + np.exp(-2.0 * x))) - 1.0
+#
+#    def derivative(self, x):
+#
+#        f = self.f(x)
+#        return 1.0 - (f ** 2.0)
+#
+#
+#class ReluNode(ActivationNode):
+#    """A node where the activation function is a rectified linear unit:
+#
+#        f(x) = max(0, x).
+#    """
+#    def f(self, x):
+#
+#        return np.maximum(0.0, x)
+#
+#    def derivative(self, x):
+#
+#        return np.sign(np.maximum(0.0, x))
 
 
 class BaseLoss(with_metaclass(abc.ABCMeta,
@@ -587,6 +648,9 @@ class BinaryCrossEntropyLoss(BaseLoss):
     """
     def f(self, x):
 
+        eps = consts.FLOAT_EPSILON
+        x = np.clip(x, eps, 1.0 - eps)
+
         return -np.sum(np.multiply(self.target, np.log(x)) +
                        np.multiply(1.0 - self.target, np.log(1.0 - x)))
 
@@ -601,6 +665,9 @@ class CategoricalCrossEntropyLoss(BaseLoss):
         f(x) = -\sum_{i=1}^n t_i * log(x_i).
     """
     def f(self, x):
+
+        eps = consts.FLOAT_EPSILON
+        x = np.clip(x, eps, 1.0 - eps)
 
         return -np.sum(np.multiply(self.target, np.log(x)))
 

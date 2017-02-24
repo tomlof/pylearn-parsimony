@@ -11,6 +11,7 @@ Copyright (c) 2013-2014, CEA/DSV/I2BM/Neurospin. All rights reserved.
 from . import properties
 from . import losses
 from . import penalties
+from . import step_sizes
 
 from .combinedfunctions import CombinedFunction
 from .combinedfunctions import LinearRegressionL1L2TV
@@ -21,7 +22,7 @@ from .combinedfunctions import LinearRegressionL2SmoothedL1TV
 from .combinedfunctions import AugmentedLinearRegressionL1L2TV
 from .combinedfunctions import PrincipalComponentAnalysisL1TV
 
-__all__ = ["properties", "losses", "penalties",
+__all__ = ["properties", "losses", "penalties", "step_sizes",
 
            "CombinedFunction",
            "LinearRegressionL1L2TV", "LinearRegressionL1L2GL",
