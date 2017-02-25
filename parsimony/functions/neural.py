@@ -559,13 +559,20 @@ class SoftmaxNode(ActivationNode):
         f(x) = exp(zi) / sum_j exp(zj).
     """
     def f(self, x):
+        """A softmax activation node.
 
-        if isinstance(x, np.ndarray):
-            # x = x - np.max(x)
-            # TODO: Unsafe! May overflow! Fix!
-            return np.exp(x) / np.sum(np.exp(x))
-        else:
-            return np.exp(x) / np.sum(np.exp(x))
+        Parameters
+        ----------
+        x : numpy.ndarray, shape (num_outputs, num_samples)
+            The point at which to evaluate the function. Each column is one
+            signal, and the rows correspond to output nodes.
+        """
+        if not isinstance(x, np.ndarray):
+            raise ValueError("Softmax must be applied to a vector!")
+
+        x_ = x - x.max(axis=0)
+        x_ = np.exp(x_)
+        return x_ / np.sum(x_, axis=0)
 
     def derivative(self, x):
 
