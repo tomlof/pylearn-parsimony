@@ -453,10 +453,13 @@ class OutputLayer(BaseLayer):
 
         # Compute delta in the output layer
         z = self.get_signal()  # z = Wi * aj
-        d1 = self.get_derivative(z)  # g'(z) = g'(Wi * aj)
-        d2 = self.get_loss().derivative(y)  # dL / dz
+        d2 = self.get_derivative(z)  # g'(z) = g'(Wi * aj)
+        d1 = self.get_loss().derivative(y)  # dL / dz
 
-        self._delta = np.multiply(d1, d2)
+        if d2.shape[0] == d2.shape[1]:  # Full square Jacobian matrix
+            self._delta = np.dot(d1.T, d2).T
+        else:  # Simplification/speed-up for diagonal Jacobians
+            self._delta = np.multiply(d1, d2)
 
         # Compute gradient
         aj = self._prev_layer.get_activation()  # Activation of previous layer
@@ -576,12 +579,12 @@ class SoftmaxNode(ActivationNode):
 
     def derivative(self, x):
 
-#        f = self.f(x)
-#        if isinstance(x, np.ndarray):
-#            return np.multiply(f, 1.0 - f)
-#        else:
-#            return f * (1.0 - f)
-        pass
+        n = x.shape[0]
+        J = np.dot(-x, x.T)
+        di = np.diag_indices(n)
+        J[di] += x.ravel()
+
+        return J
 
 
 #class TanhNode(ActivationNode):
