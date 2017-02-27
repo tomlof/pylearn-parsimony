@@ -28,30 +28,16 @@ try:
     from . import step_sizes  # Only works when imported as a package.
 except ValueError:
     import parsimony.functions.step_sizes as step_sizes  # Run as a script.
-
-#try:
-#    from . import combinedfunctions  # Only works when imported as a package.
-#except ValueError:
-#    import parsimony.functions.combinedfunctions as combinedfunctions  # Run as a script.
-#try:
-#    from .multiblock import losses as multiblocklosses  # Only works when imported as a package.
-#except ValueError:
-#    import parsimony.functions.multiblock.losses as multiblocklosses  # Run as a script.
-#try:
-#    from .multiblock import properties as multiblockprops  # Only works when imported as a package.
-#except ValueError:
-#    import parsimony.functions.multiblock.properties as multiblockprops  # Run as a script.
-#import parsimony.utils as utils
-
 from parsimony.utils import check_arrays
 import parsimony.utils.consts as consts
 
 
 __all__ = ["BaseNetwork", "FeedForwardNetwork",
            "BaseLayer", "InputLayer", "HiddenLayer", "OutputLayer",
+           "SoftmaxCategoricalCrossEntropyOutputLayer",
            "BaseNode", "InputNode", "ActivationNode", "IdentityNode",
-           "LogisticNode", "TanhNode", "ReluNode", "BaseLoss",
-           "SquaredSumLoss", "BinaryCrossEntropyLoss",
+           "LogisticNode", "TanhNode", "ReluNode", "SoftmaxNode",
+           "BaseLoss", "SquaredSumLoss", "BinaryCrossEntropyLoss",
            "CategoricalCrossEntropyLoss"]
 
 
@@ -74,8 +60,8 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
     y : numpy.ndarray, shape (n-by-q)
         The example outputs.
 
-    output : parsimony.neural.BaseNode or list of parsimony.neural.BaseNode
-        The nodes of the ourput layer. If passed a BaseNode, then all nodes
+    output_nodes : parsimony.neural.BaseNode or list of parsimony.neural.BaseNode
+        The nodes of the output layer. If passed a BaseNode, then all nodes
         of the output layer are of this type; if passed a list of
         BaseNodes, then each node's type is given by the corresponding
         element in the list.
@@ -83,7 +69,7 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
     loss : parsimony.neural.BaseLoss
         The loss function of the network.
     """
-    def __init__(self, X, y, output, loss,
+    def __init__(self, X, y, output_nodes, loss,
                  step_size=step_sizes.ConstantStepSize(0.01)):
 
         X, y = check_arrays(X, y)
@@ -92,7 +78,15 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
         self.y = y
         self._input = InputLayer(num_nodes=X.shape[1])
         self._layers = []
-        self._output = OutputLayer(loss, num_nodes=y.shape[1], nodes=output)
+        if self._all_nodes_equal(output_nodes, SoftmaxNode) \
+                and isinstance(loss, CategoricalCrossEntropyLoss):
+
+            self._output = SoftmaxCategoricalCrossEntropyOutputLayer(loss,
+                                                        num_nodes=y.shape[1],
+                                                        nodes=output_nodes)
+        else:
+            self._output = OutputLayer(loss, num_nodes=y.shape[1],
+                                       nodes=output_nodes)
 
         loss.set_target(y.T)  # Note: The network outputs column vectors
 
@@ -109,6 +103,19 @@ class BaseNetwork(with_metaclass(abc.ABCMeta,
         self._output.connect_prev(self._input)
         self._layers = []
         self._step_size.reset()
+
+    def _all_nodes_equal(self, nodes, node_type):
+
+        if isinstance(nodes, list):
+            equal = True
+            for node in nodes:
+                if not isinstance(node, node_type):
+                    equal = False
+                    break
+        else:
+            equal = isinstance(nodes, node_type)
+
+        return equal
 
     def add_layer(self, layer):
 
@@ -456,8 +463,16 @@ class OutputLayer(BaseLayer):
         d2 = self.get_derivative(z)  # g'(z) = g'(Wi * aj)
         d1 = self.get_loss().derivative(y)  # dL / dz
 
-        if d2.shape[0] == d2.shape[1]:  # Full square Jacobian matrix
-            self._delta = np.dot(d1.T, d2).T
+        if len(d2.shape) == 3:  # Full square Jacobian matrices for each sample
+
+            # Warning! This may be very slow when there are many samples!
+            # In many cases (such as with softmax + cross entropy) it is
+            # possible to create a specialised output layer for this that
+            # becomes much more efficient!
+            self._delta = np.zeros((d1.shape[0], d2.shape[0]))
+            for i in range(d2.shape[0]):
+                self._delta[:, i] = np.dot(d1[:, [i]].T, d2[i, :, :]).ravel()
+
         else:  # Simplification/speed-up for diagonal Jacobians
             self._delta = np.multiply(d1, d2)
 
@@ -474,6 +489,33 @@ class OutputLayer(BaseLayer):
     def set_loss(self, loss):
 
         self._loss = loss
+
+
+class SoftmaxCategoricalCrossEntropyOutputLayer(OutputLayer):
+    """Represents an output layer with softmax + categorical cross-entropy loss
+    """
+    def __init__(self, loss, num_nodes=None, nodes=None, weights=None):
+
+        if loss is None:
+            loss = self.set_loss(CategoricalCrossEntropyLoss())
+
+        if not isinstance(loss, CategoricalCrossEntropyLoss):
+            raise ValueError("Loss must be categorical cross-entropy!")
+
+        super(SoftmaxCategoricalCrossEntropyOutputLayer, self) \
+            .__init__(loss, num_nodes=num_nodes, nodes=nodes, weights=weights)
+
+    def _backward(self, y):
+
+        # Compute delta in the output layer
+        t = self.get_loss().get_target()
+        self._delta = y - t
+
+        # Compute gradient
+        aj = self._prev_layer.get_activation()  # Activation of previous layer
+        self._grad = np.dot(self._delta, aj.T)
+
+        return self._delta
 
 
 class BaseNode(with_metaclass(abc.ABCMeta,
@@ -579,44 +621,53 @@ class SoftmaxNode(ActivationNode):
 
     def derivative(self, x):
 
-        n = x.shape[0]
-        J = np.dot(-x, x.T)
-        di = np.diag_indices(n)
-        J[di] += x.ravel()
+        if len(x.shape) == 1:
+            x = x[:, np.newaxis]
+
+        S = self.f(x)
+
+        p = S.shape[0]  # num_outputs
+        n = S.shape[1]  # num_samples
+        J = np.zeros((n, p, p))
+        di = np.diag_indices(p)
+        for i in range(S.shape[1]):
+            Si = S[:, [i]]
+            Ji = np.dot(-Si, Si.T)
+            Ji[di] += Si.ravel()
+
+            J[i, :, :] = Ji
 
         return J
 
 
-#class TanhNode(ActivationNode):
-#    """A node where the activation function is the hyperbolic tangent function:
-#
-#        f(x) = tanh(x) = (2 / (1 + exp(-2x))) - 1.
-#    """
-#    def f(self, x):
-#
-#        if isinstance(x, np.ndarray):
-#            return 2.0 * np.reciprocal(1.0 + np.exp(-2.0 * x)) - 1.0
-#        else:
-#            return (2.0 / (1.0 + np.exp(-2.0 * x))) - 1.0
-#
-#    def derivative(self, x):
-#
-#        f = self.f(x)
-#        return 1.0 - (f ** 2.0)
-#
-#
-#class ReluNode(ActivationNode):
-#    """A node where the activation function is a rectified linear unit:
-#
-#        f(x) = max(0, x).
-#    """
-#    def f(self, x):
-#
-#        return np.maximum(0.0, x)
-#
-#    def derivative(self, x):
-#
-#        return np.sign(np.maximum(0.0, x))
+class TanhNode(ActivationNode):
+    """A node where the activation function is the hyperbolic tangent function:
+
+        f(x) = tanh(x) = (2 / (1 + exp(-2x))) - 1.
+    """
+    def f(self, x):
+
+        return np.tanh(x)
+
+    def derivative(self, x):
+
+        a = self.f(x)
+        return 1.0 - (a ** 2.0)
+
+
+class ReluNode(ActivationNode):
+    """A node where the activation function is a rectified linear unit:
+
+        f(x) = max(0, x).
+    """
+    def f(self, x):
+
+        return np.maximum(0.0, x)
+
+    def derivative(self, x):
+
+        a = self.f(x)
+        return np.sign(a)  # a is non-negative
 
 
 class BaseLoss(with_metaclass(abc.ABCMeta,
