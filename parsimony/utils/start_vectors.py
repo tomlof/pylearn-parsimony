@@ -12,11 +12,19 @@ from six import with_metaclass
 import abc
 import numpy as np
 
-from . import maths
+try:
+    from . import maths  # Only works when imported as a package.
+except (ValueError, SystemError):
+    import parsimony.utils.maths as maths  # Run as a script.
+try:
+    from . import consts  # Only works when imported as a package.
+except (ValueError, SystemError):
+    import parsimony.utils.consts as consts  # Run as a script.
 
 __all__ = ["BaseStartVector", "IdentityStartVector", "RandomStartVector",
            "OnesStartVector", "ZerosStartVector",
-           "NormalisedInitialisation"]
+           "NeuralNetworkInitialisation", "TanhInitialisation",
+           "LogisticInitialisation", "OrthogonalRandomInitialisation"]
 
 
 class BaseStartVector(with_metaclass(abc.ABCMeta, object)):
@@ -39,20 +47,20 @@ class BaseStartVector(with_metaclass(abc.ABCMeta, object)):
         implementing classes. Default is None. Consider using random_state
         instead of a seed!
     """
-    # TODO: Set normalise to False per default!
-    def __init__(self, normalise=True, random_state=None, seed=None):
+    def __init__(self, normalise=False, random_state=None, seed=None):
 
         super(BaseStartVector, self).__init__()
 
-        self.normalise = normalise
+        self.normalise = bool(normalise)
         self.random_state = random_state
 
         if seed is None:
             if random_state is None:
-                random_state = np.random.RandomState()
+                random_state = None  # np.random.RandomState()
         else:
             if random_state is None:
-                random_state = np.random.RandomState(seed)
+                np.random.seed(seed)  # TODO: Adapt code to use RandomState instead!
+#                random_state = np.random.RandomState(seed)
             else:
                 random_state.seed(seed)
 
@@ -122,6 +130,18 @@ class RandomUniformStartVector(BaseStartVector):
 
     Parameters
     ----------
+    limits : list or tuple
+        A list or tuple with two elements, the lower and upper limits of the
+        uniform distribution. If normalise=True, then these limits may not be
+        honoured. Default is (-1.0, 1.0). Default is 1. If both limits and
+        variance is given, the limits will be used.
+
+    variance : int
+        The variance of the sampled symmetric uniform points. Default is 1. If
+        both limits and variance is given, the limits will be used. If
+        normalise is True, the variance is likely to deviate from the
+        requested.
+
     normalise : bool
         Whether or not to normalise the vector that is returned.
 
@@ -137,34 +157,30 @@ class RandomUniformStartVector(BaseStartVector):
         implementing classes. Default is None. Consider using random_state
         instead of a seed!
 
-    limits : List or tuple. A list or tuple with two elements, the lower and
-            upper limits of the uniform distribution. If normalise=True, then
-            these limits may not be honoured. Default is (0.0, 1.0).
-
     Examples
     --------
     >>> import numpy as np
-    >>> from parsimony.utils.start_vectors import RandomUniformStartVector
     >>> import parsimony.utils.maths as maths
+    >>> from parsimony.utils.start_vectors import RandomUniformStartVector
     >>>
     >>> # Without normalization
-    >>> start_vector = RandomUniformStartVector(normalise=False, seed=42)
+    >>> start_vector = RandomUniformStartVector(seed=42)
     >>> random = start_vector.get_vector(3)
-    >>> random
-    array([[ 0.234511  ],
-           [ 0.62352784],
-           [ 0.34002252]])
-    >>> (np.round(maths.norm(random), 13) - 0.7479289363407) < 5e-16
+    >>> print(random)
+    [[-0.25091976]
+     [ 0.90142861]
+     [ 0.46398788]]
+    >>> (np.round(maths.norm(random), 13) - 1.2569618625429) < 5e-16
     True
     >>>
     >>> # With normalization
     >>> start_vector_normalized = RandomUniformStartVector(normalise=True,
     ...                                                    seed=2)
     >>> random_normalized = start_vector_normalized.get_vector(3)
-    >>> random_normalized
-    array([[ 0.682375  ],
-           [ 0.67588318],
-           [ 0.27847134]])
+    >>> print(random_normalized)
+    [[-0.1330817 ]
+     [-0.98571123]
+     [ 0.10326001]]
     >>> (np.round(maths.norm(random_normalized), 13) - 1.0) < 5e-16
     True
     >>>
@@ -173,33 +189,44 @@ class RandomUniformStartVector(BaseStartVector):
     ...                                                    seed=2,
     ...                                                    limits=(-1.0, 1.0))
     >>> random_limits = start_vector_normalized.get_vector(3)
-    >>> random_limits
-    array([[-0.52833063],
-           [-0.07116996],
-           [ 0.84605058]])
+    >>> print(random_limits)
+    [[-0.1330817 ]
+     [-0.98571123]
+     [ 0.10326001]]
     >>> (np.round(maths.norm(random_limits), 13) - 1.0) < 5e-16
     True
     >>> start_vector = RandomUniformStartVector(normalise=True,
     ...                                         random_state=np.random.RandomState(3),
     ...                                         limits=(-1.0, 1.0))
     >>> random_1 = start_vector.get_vector((2, 3))
-    >>> random_1
-    array([[ 0.08019838,  0.32861824, -0.33011403],
-           [ 0.01709433,  0.62037419,  0.62565698]])
+    >>> print(random_1)
+    [[ 0.08019838  0.32861824 -0.33011403]
+     [ 0.01709433  0.62037419  0.62565698]]
     >>> start_vector = RandomUniformStartVector(normalise=True,
     ...                                         random_state=np.random.RandomState(),
     ...                                         seed=3,
     ...                                         limits=(-1.0, 1.0))
     >>> random_2 = start_vector.get_vector((2, 3))
-    >>> random_2
-    array([[ 0.08019838,  0.32861824, -0.33011403],
-           [ 0.01709433,  0.62037419,  0.62565698]])
+    >>> print(random_2)
+    [[ 0.08019838  0.32861824 -0.33011403]
+     [ 0.01709433  0.62037419  0.62565698]]
+    >>> start_vector = RandomUniformStartVector(seed=3, variance=2.0)
+    >>> random = start_vector.get_vector((3, 2))
+    >>> print(random)
+    [[ 0.24885788  1.01971191]
+     [-1.02435339  0.05304422]
+     [ 1.92503907  1.94143171]]
     """
-    def __init__(self, limits=(0.0, 1.0), **kwargs):
+    def __init__(self, limits=None, variance=None, **kwargs):
 
         super(RandomUniformStartVector, self).__init__(**kwargs)
 
+        if (limits is None) and (variance is None):
+            limits = (-1.0, 1.0)
+
         self.limits = limits
+        if variance is not None:
+            self.variance = max(consts.FLOAT_EPSILON, float(variance))
 
     def get_vector(self, shape):
         """Return randomly generated vector of given shape.
@@ -215,28 +242,34 @@ class RandomUniformStartVector(BaseStartVector):
         >>> import numpy as np
         >>> from parsimony.utils.start_vectors import RandomStartVector
         >>>
-        >>> start_vector = RandomStartVector(normalise=False, seed=42)
+        >>> start_vector = RandomStartVector(seed=42)
         >>> random = start_vector.get_vector(3)
-        >>> random
-        array([[ 0.37454012],
-               [ 0.95071431],
-               [ 0.73199394]])
+        >>> print(random)
+        [[-0.25091976]
+         [ 0.90142861]
+         [ 0.46398788]]
         >>>
-        >>> start_vector = RandomStartVector(normalise=False, seed=1,
-        ...                                  limits=(-1, 2))
+        >>> start_vector = RandomStartVector(seed=1, limits=(-1, 2))
         >>> random = start_vector.get_vector(3)
         >>> random
         array([[ 0.25106601],
                [ 1.16097348],
                [-0.99965688]])
         """
-        l = float(self.limits[0])
-        u = float(self.limits[1])
-
         if not isinstance(shape, (list, tuple)):
             shape = (int(shape), 1)
 
-        vector = self.random_state.rand(*shape) * (u - l) + l  # Random vector.
+        if self.limits is not None:
+            l = float(self.limits[0])
+            u = float(self.limits[1])
+        elif self.variance is not None:
+            u = np.sqrt(3.0 * self.variance)
+            l = -u
+
+        if self.random_state is None:
+            vector = np.random.rand(*shape) * (u - l) + l  # Random vector.
+        else:
+            vector = self.random_state.rand(*shape) * (u - l) + l  # Random vector.
 
         # TODO: Normalise columns when a matrix?
         if self.normalise:
@@ -256,7 +289,7 @@ class OnesStartVector(BaseStartVector):
 
     Parameters
     ----------
-    normalise : bool.
+    normalise : bool
         If True, normalise the randomly created vectors. Default is False.
 
     Examples
@@ -266,21 +299,21 @@ class OnesStartVector(BaseStartVector):
     >>> from parsimony.utils.start_vectors import OnesStartVector
     >>>
     >>> # Without normalization
-    >>> start_vector = OnesStartVector(normalise=False)
+    >>> start_vector = OnesStartVector()
     >>> ones = start_vector.get_vector(3)
-    >>> ones
-    array([[ 1.],
-           [ 1.],
-           [ 1.]])
+    >>> print(ones)
+    [[ 1.]
+     [ 1.]
+     [ 1.]]
     >>> print(maths.norm(ones))
     1.73205080757
     >>> # With normalization
     >>> start_vector_normalized = OnesStartVector(normalise=True)
     >>> ones_normalized = start_vector_normalized.get_vector(3)
-    >>> ones_normalized
-    array([[ 0.57735027],
-           [ 0.57735027],
-           [ 0.57735027]])
+    >>> print(ones_normalized)
+    [[ 0.57735027]
+     [ 0.57735027]
+     [ 0.57735027]]
     >>> print(maths.norm(ones_normalized))
     1.0
     """
@@ -377,9 +410,216 @@ class ZerosStartVector(BaseStartVector):
         return w
 
 
-class NormalisedInitialisation(BaseStartVector):
-    """Commonly used in neural networks with hyperbolic tangent activation
-    functions.
+class NeuralNetworkInitialisation(BaseStartVector):
+    """Commonly used in neural networks with different activation functions.
+
+    Parameters
+    ----------
+    K : float
+        Positive float. A scaling constant used in determining the rage of
+        weight values. Default is 96 = 4 * sqrt(6), which was recommended by
+        Glorot and Bengio (2010) for logistic activation functions.
+
+    random_state : numpy.random.RandomState
+        A random state to use when sampling pseudo-random numbers. If not
+        provided, a random state is generated with a seed, if provided.
+
+    seed : int or None
+        The seed to the pseudo-random number generator. If None, no seed is
+        used. The seed is set at initialisation, so unless a random_state is
+        provided, if the RNG is used in between initialisation and utilisation,
+        the random numbers will change. The seed is not used by all
+        implementing classes. Default is None. Consider using random_state
+        instead of a seed!
+    """
+    def __init__(self, K=96, random_state=None, seed=None):
+
+        super(NeuralNetworkInitialisation, self).__init__(normalise=False,
+                                                          random_state=random_state,
+                                                          seed=seed)
+
+        self.K = max(consts.FLOAT_EPSILON, float(K))
+
+    def get_vector(self, shape):
+        """Returns a weight matrix of chosen shape. The elements are
+        distributed as
+
+            W ~ U(-r, r),
+
+        where
+
+            r = sqrt(K / (fanin + fanout)),
+
+        where fanin = shape[1] and fanout = shape[0].
+
+        Parameters
+        ----------
+        shape : list of int or tuple of int
+            Shape of the matrix to generate. The shape of the output is shape
+            or (shape, 1) in case shape is an integer.
+
+        fanin : int
+            The number of input connections to this node.
+
+        fanout : int
+            The number of nodes in a particular layer.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> import parsimony.utils.maths as maths
+        >>> from parsimony.utils.start_vectors import NeuralNetworkInitialisation
+        >>>
+        >>> start_vector = NeuralNetworkInitialisation(seed=31337)
+        >>> W = start_vector.get_vector((2, 3))
+        >>> print(W)
+        [[ 1.94421446  4.08768236 -1.84868134]
+         [-2.88017736 -1.12508711  4.20919974]]
+        >>> start_vector = NeuralNetworkInitialisation(K=6, seed=31337)
+        >>> W = start_vector.get_vector((3, 2))
+        >>> print(W)
+        [[ 0.48605361  1.02192059]
+         [-0.46217033 -0.72004434]
+         [-0.28127178  1.05229994]]
+        """
+        if not isinstance(shape, (list, tuple)) or len(shape) != 2:
+            raise ValueError("The shape must be a 2-list or a 2-tuple.")
+
+        fanout, fanin = shape
+        r = np.sqrt(self.K / float(fanin + fanout))
+        if self.random_state is None:
+            W = np.random.rand(*shape) * (2 * r) - r
+        else:
+            W = self.random_state.rand(*shape) * (2 * r) - r
+
+        return W
+
+
+class TanhInitialisation(NeuralNetworkInitialisation):
+    """Commonly used in neural networks with the hyperbolic tangent activation
+    function.
+
+    The elements are distributed as
+
+        W ~ U(-r, r),
+
+    where
+
+        r = sqrt(6 / (fanin + fanout)),
+
+    where fanin = shape[1] and fanout = shape[0].
+
+    The variance used in this initialisation was derived by Glorot and Bengio
+    (2010).
+
+    Parameters
+    ----------
+    random_state : numpy.random.RandomState
+        A random state to use when sampling pseudo-random numbers. If not
+        provided, a random state is generated with a seed, if provided.
+
+    seed : int or None
+        The seed to the pseudo-random number generator. If None, no seed is
+        used. The seed is set at initialisation, so unless a random_state is
+        provided, if the RNG is used in between initialisation and utilisation,
+        the random numbers will change. The seed is not used by all
+        implementing classes. Default is None. Consider using random_state
+        instead of a seed!
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import parsimony.utils.maths as maths
+    >>> from parsimony.utils.start_vectors import TanhInitialisation
+    >>>
+    >>> start_vector = TanhInitialisation(seed=31337)
+    >>> W = start_vector.get_vector((2, 3))
+    >>> print(W)
+    [[ 0.48605361  1.02192059 -0.46217033]
+     [-0.72004434 -0.28127178  1.05229994]]
+    >>> start_vector = TanhInitialisation(seed=31337)
+    >>> W = start_vector.get_vector((3, 2))
+    >>> print(W)
+    [[ 0.48605361  1.02192059]
+     [-0.46217033 -0.72004434]
+     [-0.28127178  1.05229994]]
+
+    References
+    ----------
+    .. Glorot, Xavier, and Yoshua Bengio. "Understanding the difficulty of
+       training deep feedforward neural networks". International conference on
+       artificial intelligence and statistics, 2010.
+    """
+    def __init__(self, random_state=None, seed=None):
+
+        super(TanhInitialisation, self).__init__(K=6.0,
+                                                 random_state=random_state,
+                                                 seed=seed)
+
+
+class LogisticInitialisation(NeuralNetworkInitialisation):
+    """Commonly used in neural networks with the logistic sigmoid activation
+    function (Bengio, 2012).
+
+    The elements are distributed as
+
+        W ~ U(-r, r),
+
+    where
+
+        r = 4 * sqrt(6 / (fanin + fanout)),
+
+    where fanin = shape[1] and fanout = shape[0].
+
+    Parameters
+    ----------
+    random_state : numpy.random.RandomState
+        A random state to use when sampling pseudo-random numbers. If not
+        provided, a random state is generated with a seed, if provided.
+
+    seed : int or None
+        The seed to the pseudo-random number generator. If None, no seed is
+        used. The seed is set at initialisation, so unless a random_state is
+        provided, if the RNG is used in between initialisation and utilisation,
+        the random numbers will change. The seed is not used by all
+        implementing classes. Default is None. Consider using random_state
+        instead of a seed!
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import parsimony.utils.maths as maths
+    >>> from parsimony.utils.start_vectors import LogisticInitialisation
+    >>>
+    >>> start_vector = LogisticInitialisation(seed=31337)
+    >>> W = start_vector.get_vector((2, 3))
+    >>> print(W)
+    [[ 0.62112121  1.30589823 -0.5906011 ]
+     [-0.92013473 -0.35943332  1.34471958]]
+    >>> start_vector = LogisticInitialisation(seed=31337)
+    >>> W = start_vector.get_vector((3, 2))
+    >>> print(W)
+    [[ 0.62112121  1.30589823]
+     [-0.5906011  -0.92013473]
+     [-0.35943332  1.34471958]]
+
+    References
+    ----------
+    .. Bengio, Yoshua. "Practical Recommendations for Gradient-Based Training
+       of Deep Architectures". arXiv:1206.5533v2, 2012.
+    """
+    def __init__(self, random_state=None, seed=None):
+
+        super(LogisticInitialisation, self).__init__(K=4.0 * np.sqrt(6.0),
+                                                     random_state=random_state,
+                                                     seed=seed)
+
+
+class OrthogonalRandomInitialisation(NeuralNetworkInitialisation):
+    """Orthogonal random matrix initialisation used in neural networks.
+
+    The right-singular vectors of a Gaussian random matrix is used as the
+    weight matrix.
 
     Parameters
     ----------
@@ -397,50 +637,53 @@ class NormalisedInitialisation(BaseStartVector):
     """
     def __init__(self, random_state=None, seed=None):
 
-        super(NormalisedInitialisation, self).__init__(normalise=False,
-                                                       random_state=random_state,
-                                                       seed=seed)
+        super(NeuralNetworkInitialisation, self).__init__(normalise=False,
+                                                          random_state=random_state,
+                                                          seed=seed)
 
-    def get_vector(self, shape, fanin, fanout):
-        """Returns a weight matrix of chosen shape. The elements are
-        distributed as
-
-            W ~ U(-r, r),
-
-        where
-
-            r = sqrt(6 / (fanin + fanout)).
+    def get_vector(self, shape):
+        """Returns a weight matrix of chosen shape.
 
         Parameters
         ----------
-        shape : int or list of ints or tuple of ints
-            Shape of the matrix to generate. The shape of the output is shape
-            or (shape, 1) in case shape is an integer.
-
-        fanin : int
-            The number of input connections to this node.
-
-        fanout : int
-            The number of nodes in a particular layer.
+        shape : list of int or tuple of int
+            Shape of the weight matrix to generate.
 
         Examples
         --------
         >>> import numpy as np
         >>> import parsimony.utils.maths as maths
-        >>> from parsimony.utils.start_vectors import NormalisedInitialisation
+        >>> from parsimony.utils.start_vectors import OrthogonalRandomInitialisation
         >>>
-        >>> start_vector = NormalisedInitialisation()
+        >>> start_vector = OrthogonalRandomInitialisation(seed=42)
         >>> W = start_vector.get_vector((2, 3))
         >>> print(W)
-        [[ 0.]
-         [ 0.]
-         [ 0.]]
+        [[ -9.86455841e-01   1.63488317e-01   1.32832502e-02]
+         [  6.81405840e-04   8.50658731e-02  -9.96375096e-01]]
+        >>> np.allclose(np.dot(W, W.T), np.eye(W.shape[0]))
+        True
+        >>> W = start_vector.get_vector((3, 2))
+        >>> print(W)
+        [[-0.93824927  0.00478817]
+         [ 0.09818416 -0.9551057 ]
+         [ 0.33173511  0.29622656]]
+        >>> np.allclose(np.dot(W.T, W), np.eye(W.shape[1]))
+        True
         """
-        if not isinstance(shape, (list, tuple)):
-            shape = (int(shape), 1)
+        if not isinstance(shape, (list, tuple)) or len(shape) != 2:
+            raise ValueError("The shape must be a 2-list or a 2-tuple.")
 
-        r = np.sqrt(6.0 / (fanin + fanout))
-        W = self.random_state.rand(shape) * (2 * r) - r
+        if self.random_state is None:
+            A = np.random.randn(*shape)
+        else:
+            A = self.random_state.randn(*shape)
+        U, _, V = np.linalg.svd(A, full_matrices=False)
+
+        # TODO: Is this really correct??
+        if shape[0] > shape[1]:
+            W = U
+        else:
+            W = V
 
         return W
 

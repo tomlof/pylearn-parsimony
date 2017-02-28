@@ -216,6 +216,7 @@ class InformationAlgorithm(object):
     >>> from parsimony.functions.losses import LinearRegression
     >>> import numpy as np
     >>> np.random.seed(42)
+    >>>
     >>> gd = algorithms.gradient.GradientDescent(info=[Info.fvalue])
     >>> gd.info_copy()
     ['fvalue']
@@ -224,8 +225,8 @@ class InformationAlgorithm(object):
     >>> fvalue = gd.info_get(Info.fvalue)
     >>> round(fvalue[0], 10)
     0.068510926
-    >>> round(fvalue[-1], 15)
-    1.886e-12
+    >>> round(fvalue[-1], 13)
+    1.9e-12
     """
     INFO_PROVIDED = []
 

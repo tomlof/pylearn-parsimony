@@ -22,11 +22,11 @@ import numpy as np
 
 try:
     from . import properties  # Only works when imported as a package.
-except ValueError:
+except (ValueError, SystemError):
     import parsimony.functions.properties as properties  # Run as a script.
 try:
     from . import step_sizes  # Only works when imported as a package.
-except ValueError:
+except (ValueError, SystemError):
     import parsimony.functions.step_sizes as step_sizes  # Run as a script.
 from parsimony.utils import check_arrays
 import parsimony.utils.consts as consts

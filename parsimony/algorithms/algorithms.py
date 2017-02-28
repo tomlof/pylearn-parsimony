@@ -20,7 +20,7 @@ import numpy as np
 
 try:
     from . import bases  # When imported as a package.
-except ValueError:
+except:
     import parsimony.algorithms.bases as bases  # When run as a program.
 from parsimony.utils import time, consts, check_arrays, check_array_in
 try:
@@ -84,26 +84,26 @@ class SequentialMinimalOptimization(bases.ExplicitAlgorithm,
     >>> import numpy as np
     >>> import parsimony.algorithms.algorithms as alg
     >>> import parsimony.algorithms.utils as utils
-    >>>
     >>> np.random.seed(42)
+    >>>
     >>> n = 30
-    >>> X = np.vstack([0.3 * np.random.randn(n / 2, 2) + 0.25,
-    ...                0.3 * np.random.randn(n / 2, 2) + 0.75])
-    >>> y = np.vstack([1 * np.ones((n / 2, 1)),
-    ...                3 * np.ones((n / 2, 1))]) - 2
+    >>> X = np.vstack([0.3 * np.random.randn(int(n / 2), 2) + 0.25,
+    ...                0.3 * np.random.randn(int(n / 2), 2) + 0.75])
+    >>> y = np.vstack([1 * np.ones((int(n / 2), 1)),
+    ...                3 * np.ones((int(n / 2), 1))]) - 2
     >>>
     >>> K = utils.LinearKernel(X=X)
     >>> smo = alg.SequentialMinimalOptimization(1.0, kernel=K, max_iter=100)
     >>> w = smo.run(X, y)
     >>> yhat = np.zeros(y.shape)
-    >>> for j in xrange(y.shape[0]):
+    >>> for j in range(y.shape[0]):
     ...     val = 0.0
-    ...     for i in xrange(y.shape[0]):
+    ...     for i in range(y.shape[0]):
     ...         val += smo.alpha[i, 0] * y[i, 0] * smo.kernel(X[i, :], X[j, :])
     ...     val -= smo.bias
     ...     yhat[j, 0] = val
     >>> yhat = np.sign(yhat)
-    >>> round(np.mean(yhat == y), 13)
+    >>> np.mean(yhat == y)
     0.8666666666667
     """
     INFO_PROVIDED = [utils.Info.ok,
@@ -169,10 +169,10 @@ class SequentialMinimalOptimization(bases.ExplicitAlgorithm,
         while numChanged > 0 or examineAll:
             numChanged = 0
             if examineAll:
-                for i in xrange(n):
+                for i in range(n):
                     numChanged += self._examineSample(i, X, y)
             else:
-                for i in xrange(n):
+                for i in range(n):
                     if self.alpha[i, 0] > 0.0 and self.alpha[i, 0] < self.C:
                         numChanged += self._examineSample(i, X, y)
 
@@ -306,7 +306,7 @@ class SequentialMinimalOptimization(bases.ExplicitAlgorithm,
             return self._E[idx]
         else:
             val = -self.bias
-            for i in xrange(y.shape[0]):
+            for i in range(y.shape[0]):
                 if self.alpha[i, 0] > 0.0:
                     val += self.alpha[i, 0] * y[i, 0] * self.kernel(i, idx)
 
@@ -335,9 +335,9 @@ class SequentialMinimalOptimization(bases.ExplicitAlgorithm,
     def _func_val(self, X, y):
 
         f = 0.0
-        for i in xrange(y.shape[0]):
+        for i in range(y.shape[0]):
             if self.alpha[i, 0] > 0.0:
-                for j in xrange(y.shape[0]):
+                for j in range(y.shape[0]):
                     if self.alpha[j, 0] > 0.0:
                         f += y[i, 0] * y[j, 0] * self.kernel(i, j) \
                             * self.alpha[i, 0] * self.alpha[j, 0]
@@ -404,27 +404,27 @@ class MajorizationMinimization(bases.ExplicitAlgorithm,
     >>> import parsimony.algorithms.utils as utils
     >>> import parsimony.functions.losses as losses
     >>> import parsimony.functions.taylor as taylor
-    >>>
     >>> np.random.seed(42)
+    >>>
     >>> n = 30
     >>> X = np.vstack([0.3 * np.random.randn(n / 2, 2) + 0.25,
     ...                0.3 * np.random.randn(n / 2, 2) + 0.75])
-    >>> y = np.vstack([1 * np.ones((n / 2, 1)),
-    ...                3 * np.ones((n / 2, 1))]) - 2
+    >>> y = np.vstack([1 * np.ones((int(n / 2), 1)),
+    ...                3 * np.ones((int(n / 2), 1))]) - 2
     >>> function = losses.LinearRegression(X, y)
     >>> taylor_wrapper = taylor.FirstOrderTaylorWrapper()
     >>> x = np.random.randn(X.shape[1], 1)
     >>> gd = algs.gradient.GradientDescent()
     >>> opt1 = gd.run(function, x)
-    >>> round(function.f(opt1), 13)
-    0.3910141418207
+    >>> function.f(opt1)  # doctest: +ELLIPSIS
+    0.39101414...
     >>> np.round(function.grad(opt1), 13)
     array([[ -1.91855000e-08],
            [  1.85334000e-08]])
     >>> mm = alg.MajorizationMinimization(gd, function)
     >>> opt2 = mm.run(taylor_wrapper, x)
-    >>> round(function.f(opt2), 13)
-    0.3910141418207
+    >>> function.f(opt2)  # doctest: +ELLIPSIS
+    0.39101414...
     >>> np.round(function.grad(opt2), 13)
     array([[ -1.91855000e-08],
            [  1.85334000e-08]])

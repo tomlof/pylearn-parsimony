@@ -21,12 +21,12 @@ import numpy as np
 import warnings
 try:
     from scipy.interpolate import PchipInterpolator as interp1
-except ImportError:
+except (ValueError, SystemError):
     from scipy.interpolate import interp1d as interp1
 
 try:
     from . import bases  # Only works when imported as a package.
-except ValueError:
+except (ValueError, SystemError):
     import parsimony.algorithms.bases as bases  # When run as a program.
 import parsimony.utils as utils
 import parsimony.utils.maths as maths
@@ -83,8 +83,8 @@ class ISTA(bases.ExplicitAlgorithm,
     >>> ista = ISTA(max_iter=10000)
     >>> beta1 = ista.run(function, np.random.rand(50, 1))
     >>> beta2 = np.dot(np.linalg.pinv(X), y)
-    >>> round(np.linalg.norm(beta1 - beta2), 13)
-    0.0003121557633
+    >>> round(np.linalg.norm(beta1 - beta2), 13)  # doctest: +ELLIPSIS
+    0.0003121557633...
     >>>
     >>> np.random.seed(42)
     >>> X = np.random.rand(100, 50)
@@ -95,8 +95,8 @@ class ISTA(bases.ExplicitAlgorithm,
     >>> ista = ISTA(max_iter=10000)
     >>> beta1 = ista.run(function, np.random.rand(50, 1))
     >>> beta2 = np.dot(np.linalg.pinv(X), y)
-    >>> round(np.linalg.norm(beta1 - beta2), 13)
-    0.8272330310458
+    >>> round(np.linalg.norm(beta1 - beta2), 13)  # doctest: +ELLIPSIS
+    0.8272330310458...
     >>> int(np.linalg.norm(beta2.ravel(), 0))
     50
     >>> int(np.linalg.norm(beta1.ravel(), 0))
@@ -237,8 +237,8 @@ class FISTA(bases.ExplicitAlgorithm,
     >>> from parsimony.functions import LinearRegressionL1L2TV
     >>> import scipy.sparse as sparse
     >>> import numpy as np
-    >>>
     >>> np.random.seed(42)
+    >>>
     >>> X = np.random.rand(100, 50)
     >>> y = np.random.rand(100, 1)
     >>> A = sparse.csr_matrix((50, 50))  # Unused here
@@ -247,8 +247,8 @@ class FISTA(bases.ExplicitAlgorithm,
     >>> fista = FISTA(max_iter=10000)
     >>> beta1 = fista.run(function, np.random.rand(50, 1))
     >>> beta2 = np.dot(np.linalg.pinv(X), y)
-    >>> round(np.linalg.norm(beta1 - beta2), 13)
-    4.6182817e-06
+    >>> round(np.linalg.norm(beta1 - beta2), 12)  # doctest: +ELLIPSIS
+    4.618282...e-06
     >>>
     >>> np.random.seed(42)
     >>> X = np.random.rand(100, 50)
@@ -259,8 +259,8 @@ class FISTA(bases.ExplicitAlgorithm,
     >>> fista = FISTA(max_iter=10000)
     >>> beta1 = fista.run(function, np.random.rand(50, 1))
     >>> beta2 = np.dot(np.linalg.pinv(X), y)
-    >>> round(np.linalg.norm(beta1 - beta2), 14)
-    0.82723292510703
+    >>> round(np.linalg.norm(beta1 - beta2), 11)  # doctest: +ELLIPSIS
+    0.82723292511...
     >>> int(np.linalg.norm(beta2.ravel(), 0))
     50
     >>> int(np.linalg.norm(beta1.ravel(), 0))
@@ -709,8 +709,8 @@ class StaticCONESTA(bases.ExplicitAlgorithm,
     >>> static_conesta = StaticCONESTA(max_iter=10000)
     >>> beta1 = static_conesta.run(function, np.random.rand(50, 1))
     >>> beta2 = np.dot(np.linalg.pinv(X), y)
-    >>> round(np.linalg.norm(beta1 - beta2), 13)
-    0.8272329573827
+    >>> round(np.linalg.norm(beta1 - beta2), 11)  # doctest: +ELLIPSIS
+    0.82723295738...
     >>> int(np.linalg.norm(beta2.ravel(), 0))
     50
     >>> int(np.linalg.norm(beta1.ravel(), 0))
@@ -725,8 +725,8 @@ class StaticCONESTA(bases.ExplicitAlgorithm,
     >>> static_conesta = StaticCONESTA(max_iter=10000)
     >>> beta1 = static_conesta.run(function, np.zeros((50, 1)))
     >>> beta2 = np.dot(np.linalg.pinv(X), y)
-    >>> round(np.linalg.norm(beta1 - beta2), 11)
-    0.9662907061
+    >>> round(np.linalg.norm(beta1 - beta2), 11)  # doctest: +ELLIPSIS
+    0.9662907061...
     """
     INTERFACES = [properties.NesterovFunction,
                   properties.StepSize,

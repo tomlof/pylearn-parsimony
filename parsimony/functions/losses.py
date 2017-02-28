@@ -22,7 +22,7 @@ import numpy as np
 
 try:
     from . import properties  # Only works when imported as a package.
-except ValueError:
+except (ValueError, SystemError):
     import parsimony.functions.properties as properties  # Run as a script.
 import parsimony.utils as utils
 import parsimony.utils.consts as consts
@@ -137,8 +137,8 @@ class LinearRegression(properties.CompositeFunction,
         >>> L_ = lr.approx_L((15, 1), 10000)
         >>> L >= L_
         True
-        >>> round((L - L_) / L, 14)
-        0.14039091870818
+        >>> (L - L_) / L  # doctest: +ELLIPSIS
+        0.1403...
         """
         if self._L is None:
 
@@ -170,7 +170,7 @@ class LinearRegression(properties.CompositeFunction,
 
         return self._L
 
-    def step(self, beta, index=0):
+    def step(self, beta, index=0, **kwargs):
         """The step size to use in descent methods.
 
         Parameters
@@ -330,7 +330,7 @@ class RidgeRegression(properties.CompositeFunction,
 
         return self._lambda_min + self.k
 
-    def step(self, beta, index=0):
+    def step(self, beta, index=0, **kwargs):
         """The step size to use in descent methods.
 
         Parameters
@@ -470,15 +470,15 @@ class LogisticRegression(properties.AtomicFunction,
         >>> L_ = lr.approx_L((15, 1), 10000)
         >>> L >= L_
         True
-        >>> round((L - L_) / L, 15)
-        0.45110910457988
+        >>> (L - L_) / L  # doctest: +ELLIPSIS
+        0.4511...
         >>> lr = LogisticRegression(X=X, y=y, mean=False)
         >>> L = lr.L()
         >>> L_ = lr.approx_L((15, 1), 10000)
         >>> L >= L_
         True
-        >>> round((L - L_) / L, 13)
-        0.430306683612
+        >>> (L - L_) / L  # doctest: +ELLIPSIS
+        0.4303...
         """
         if self._L is None:
             # pi(x) * (1 - pi(x)) <= 0.25 = 0.5 * 0.5
@@ -492,7 +492,7 @@ class LogisticRegression(properties.AtomicFunction,
 
         return self._L
 
-    def step(self, beta, index=0):
+    def step(self, beta, index=0, **kwargs):
         """The step size to use in descent methods.
 
         Parameters
@@ -664,7 +664,7 @@ class RidgeLogisticRegression(properties.CompositeFunction,
 
         return self._L
 
-    def step(self, beta, index=0):
+    def step(self, beta, index=0, **kwargs):
         """The step size to use in descent methods.
 
         Parameters
@@ -760,11 +760,11 @@ class LatentVariableVariance(properties.Function,
         >>> X = np.random.rand(50, 150)
         >>> w = np.random.rand(150, 1)
         >>> var = LatentVariableVariance(X)
-        >>> round(var.L(), 10)
-        47025.0809786841
+        >>> var.L()  # doctest: +ELLIPSIS
+        47025.0809...
         >>> _, S, _ = np.linalg.svd(np.dot(X.T, X))
-        >>> round(np.max(S) * 49 / 2.0, 10)
-        47025.0809786841
+        >>> np.max(S) * 49 / 2.0  # doctest: +ELLIPSIS
+        47025.0809...
         """
         if self._lambda_max is None:
             from parsimony.algorithms.nipals import RankOneSVD
@@ -775,7 +775,7 @@ class LatentVariableVariance(properties.Function,
 
         return self._n * self._lambda_max / 2.0
 
-    def step(self, w, index=0):
+    def step(self, w, index=0, **kwargs):
         """The step size to use in descent methods.
 
         Parameters
@@ -873,7 +873,7 @@ class LinearFunction(properties.CompositeFunction,
         """
         return 0.0
 
-    def step(self, beta=None, index=0):
+    def step(self, beta=None, index=0, **kwargs):
         """The step size to use in descent methods.
         """
         return 1.0

@@ -483,7 +483,7 @@ class CombinedFunction(properties.CompositeFunction,
 
         return proj_x
 
-    def step(self, x):
+    def step(self, x, **kwargs):
         """The step size to use in descent methods.
 
         From the interface "StepSize".

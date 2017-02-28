@@ -22,7 +22,7 @@ import numpy as np
 
 try:
     from . import bases  # Only works when imported as a package.
-except ValueError:
+except (ValueError, SystemError):
     import parsimony.algorithms.bases as bases  # When run as a program.
 import parsimony.utils as utils
 import parsimony.utils.maths as maths
@@ -75,6 +75,7 @@ class LassoCoordinateDescent(bases.ImplicitAlgorithm,
     >>> import parsimony.functions.penalties as penalties
     >>> import numpy as np
     >>> np.random.seed(42)
+    >>>
     >>> X = np.random.rand(100, 50)
     >>> beta_star = np.random.rand(50, 1)
     >>> beta_star[beta_star < 0.5] = 0.0
@@ -82,12 +83,11 @@ class LassoCoordinateDescent(bases.ImplicitAlgorithm,
     >>> l = 0.0618
     >>> alg = LassoCoordinateDescent(l)
     >>> function = functions.CombinedFunction()
-    >>> function.add_function(functions.losses.LinearRegression(X, y,
-    ...                                                         mean=False))
+    >>> function.add_loss(functions.losses.LinearRegression(X, y, mean=False))
     >>> function.add_prox(penalties.L1(l=l))
     >>> beta = alg.run(X, y)
-    >>> round(np.linalg.norm(beta_star - beta), 14)
-    0.34655181469595
+    >>> round(np.linalg.norm(beta_star - beta), 8)  # doctest: +ELLIPSIS
+    0.346551...
     """
     INFO_PROVIDED = [Info.ok,
                      Info.num_iter,
@@ -273,12 +273,11 @@ class ShootingAlgorithm(bases.ImplicitAlgorithm,
     >>> l = 0.0618
     >>> alg = ShootingAlgorithm(l)
     >>> function = functions.CombinedFunction()
-    >>> function.add_function(functions.losses.LinearRegression(X, y,
-    ...                                                         mean=False))
+    >>> function.add_loss(functions.losses.LinearRegression(X, y, mean=False))
     >>> function.add_prox(penalties.L1(l=l))
     >>> beta = alg.run(X, y)
-    >>> round(np.linalg.norm(beta_star - beta), 14)
-    0.34655181469595
+    >>> round(np.linalg.norm(beta_star - beta), 14)  # doctest: +ELLIPSIS
+    0.346551...
     """
     INFO_PROVIDED = [Info.ok,
                      Info.num_iter,
