@@ -144,8 +144,8 @@ def project(v, u):
     >>> utils.corr(a, b)  # doctest: +ELLIPSIS
     0.704...
     >>> c = utils.project(a, b)
-    >>> utils.corr(c, b)
-    1.0
+    >>> abs(utils.corr(c, b) - 1.0) < 5e-16
+    True
     """
     return (np.dot(v.T, u) / np.dot(u.T, u)) * u
 

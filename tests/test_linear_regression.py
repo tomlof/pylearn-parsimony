@@ -2,7 +2,7 @@
 """
 Created on Thu Feb 27 09:21:23 2014
 
-Copyright (c) 2013-2014, CEA/DSV/I2BM/Neurospin. All rights reserved.
+Copyright (c) 2013-2017, CEA/DSV/I2BM/Neurospin. All rights reserved.
 
 @author:  Tommy Löfstedt
 @email:   lofstedt.tommy@gmail.com
@@ -16,7 +16,7 @@ import parsimony.algorithms.proximal as proximal
 import parsimony.utils.consts as consts
 try:
     from .tests import TestCase  # When imported as a package.
-except ValueError:
+except (ValueError, SystemError):
     from tests import TestCase  # When run as a program.
 
 

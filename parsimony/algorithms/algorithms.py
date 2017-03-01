@@ -20,17 +20,17 @@ import numpy as np
 
 try:
     from . import bases  # When imported as a package.
-except:
+except (ValueError, SystemError):
     import parsimony.algorithms.bases as bases  # When run as a program.
 from parsimony.utils import time, consts, check_arrays, check_array_in
 try:
     from . import utils as utils
-except:
+except (ValueError, SystemError):
     import parsimony.algorithms.utils as utils
 
 import parsimony.functions.properties as properties
 
-__all__ = ["SequentialMinimalOptimization"]
+__all__ = ["SequentialMinimalOptimization", "MajorizationMinimization"]
 
 
 class SequentialMinimalOptimization(bases.ExplicitAlgorithm,
@@ -103,8 +103,8 @@ class SequentialMinimalOptimization(bases.ExplicitAlgorithm,
     ...     val -= smo.bias
     ...     yhat[j, 0] = val
     >>> yhat = np.sign(yhat)
-    >>> np.mean(yhat == y)
-    0.8666666666667
+    >>> np.mean(yhat == y)  # doctest: +ELLIPSIS
+    0.86666666...
     """
     INFO_PROVIDED = [utils.Info.ok,
                      utils.Info.time,

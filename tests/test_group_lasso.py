@@ -2,7 +2,7 @@
 """
 Created on Mon Feb 24 11:03:30 2014
 
-Copyright (c) 2013-2014, CEA/DSV/I2BM/Neurospin. All rights reserved.
+Copyright (c) 2013-2017, CEA/DSV/I2BM/Neurospin. All rights reserved.
 
 @author:  Tommy Löfstedt
 @email:   lofstedt.tommy@gmail.com
@@ -10,7 +10,7 @@ Copyright (c) 2013-2014, CEA/DSV/I2BM/Neurospin. All rights reserved.
 """
 try:
     from .tests import TestCase  # When imported as a package.
-except ValueError:
+except (ValueError, SystemError):
     from tests import TestCase  # When run as a program.
 
 from parsimony.algorithms.proximal import FISTA
