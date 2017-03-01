@@ -500,7 +500,7 @@ class Lasso(RegressionEstimator):
         X, y = check_arrays(X, y)
 
         function = functions.CombinedFunction()
-        function.add_function(losses.LinearRegression(X, y, mean=self.mean))
+        function.add_loss(losses.LinearRegression(X, y, mean=self.mean))
         function.add_prox(penalties.L1(l=self.l,
                                        penalty_start=self.penalty_start))
 
@@ -618,7 +618,7 @@ class ElasticNet(RegressionEstimator):
         X, y = check_arrays(X, y)
 
         function = functions.CombinedFunction()
-        function.add_function(losses.LinearRegression(X, y, mean=self.mean))
+        function.add_loss(losses.LinearRegression(X, y, mean=self.mean))
         function.add_penalty(penalties.L2Squared(l=self.alpha * (1.0 - self.l),
                                                  penalty_start=self.penalty_start))
         function.add_prox(penalties.L1(l=self.alpha * self.l,
