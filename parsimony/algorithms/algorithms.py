@@ -365,7 +365,7 @@ class MajorizationMinimization(bases.ExplicitAlgorithm,
 
     Parameters
     ----------
-    algorithm : bases.ExplicitAlgorithm
+    algorithm : bases.ExplicitAlgorithm and bases.IterativeAlgorithm
         An algorithm that can be used to minimise g.
 
     function : Function
@@ -373,26 +373,31 @@ class MajorizationMinimization(bases.ExplicitAlgorithm,
         MajoriserFunction. Also, used if Info.func_val is supplied, it will
         then be used when computing the function value.
 
-    max_mm_iter : int
+    eps : float, optional
+        Must be positive. Tolerance used for the stopping criterion in the
+        algorithm. Default is 5e-8.
+
+    max_mm_iter : int, optional
         Must be non-negative. Maximum allowed number of iterations in the inner
         MM minimisation. Default is 1.
 
-    max_iter : int
+    max_iter : int, optional
         Must be non-negative. Maximum allowed number of iterations. Default is
-        20000.
+        ``consts.MAX_ITER``.
 
-    min_iter : int
+    min_iter : int, optional
         Must be non-negative and less than or equal to max_iter. Minimum number
         of iterations that must be performed. Default is 1.
 
-    info : list or tuple of utils.consts.Info
+    info : list or tuple of utils.consts.Info, optional
         What, if any, extra run information should be stored. Default is an
         empty list, which means that no run information is computed nor
         returned.
 
-    callback: Callable
+    callback: Callable, optional
         A callable object that will be called at the end of each iteration with
-        locals() as arguments.
+        ``locals()`` as arguments. Default is ``None``, which means to not call
+        any callback function.
 
     Returns
     -------
@@ -442,16 +447,24 @@ class MajorizationMinimization(bases.ExplicitAlgorithm,
                      Info.converged,
                      Info.other]
 
-    def __init__(self, algorithm, function, eps=5e-8, max_mm_iter=1,
-                 max_iter=consts.MAX_ITER, min_iter=1, info=[], callback=None):
+    def __init__(self,
+                 algorithm,
+                 function,
+                 eps=5e-8,
+                 max_mm_iter=1,
+                 max_iter=consts.MAX_ITER,
+                 min_iter=1,
+                 info=[],
+                 callback=None):
 
         super(MajorizationMinimization, self).__init__(info=info,
                                                        max_iter=max_iter,
                                                        min_iter=min_iter)
 
-        # if isinstance(algorithm, bases.InformationAlgorithm):
-        #     self.INFO_PROVIDED.extend(algorithm.INFO_PROVIDED)
-        #     self.INFO_PROVIDED = list(set(self.INFO_PROVIDED))
+        if not isinstance(algorithm, (bases.ExplicitAlgorithm,
+                                      bases.IterativeAlgorithm)):
+            raise ValueError('"algorithm" must be an "ExplicitAlgorithm" and '
+                             'an "IterativeAlgorithm".')
 
         self.algorithm = algorithm
         self.function = function
