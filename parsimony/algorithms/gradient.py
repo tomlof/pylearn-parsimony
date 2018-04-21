@@ -83,8 +83,11 @@ class GradientDescent(bases.ExplicitAlgorithm,
                      Info.func_val,
                      Info.converged]
 
-    def __init__(self, eps=consts.TOLERANCE,
-                 info=[], max_iter=20000, min_iter=1):
+    def __init__(self,
+                 eps=consts.TOLERANCE,
+                 info=[],
+                 max_iter=20000,
+                 min_iter=1):
 
         super(GradientDescent, self).__init__(info=info,
                                               max_iter=max_iter,

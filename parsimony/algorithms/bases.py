@@ -177,24 +177,50 @@ class IterativeAlgorithm(object):
         iterations performed by the iterative algorithm. All algorithms that
         inherit from IterativeAlgortihm MUST call iter_reset before every run.
     """
-    def __init__(self, max_iter=consts.MAX_ITER, min_iter=1, callback=None,
+    def __init__(self,
+                 max_iter=consts.MAX_ITER,
+                 min_iter=1,
+                 callback=None,
                  **kwargs):
 
         super(IterativeAlgorithm, self).__init__(**kwargs)
 
-        self.min_iter = max(0, int(min_iter))
-        self.max_iter = max(self.min_iter, int(max_iter))
-        if (callback is None) or hasattr(callback, "__call__"):
-            self.callback = callback
-        else:
-            raise ValueError("The callback must be callable, or None.")
+        self.min_iter = min_iter
+        self.max_iter = max_iter
+        self.callback = callback
         self.num_iter = 0
 
         self.iter_reset()
 
     def iter_reset(self):
-
         self.num_iter = 0
+
+    @property
+    def min_iter(self):
+        return self._min_iter
+
+    @min_iter.setter
+    def min_iter(self, value):
+        self._min_iter = max(0, int(value))
+
+    @property
+    def max_iter(self):
+        return self._max_iter
+
+    @max_iter.setter
+    def max_iter(self, value):
+        self._max_iter = max(self.min_iter, int(value))
+
+    @property
+    def callback(self):
+        return self._callback
+
+    @callback.setter
+    def callback(self, value):
+        if (value is None) or hasattr(value, "__call__"):
+            self._callback = value
+        else:
+            raise ValueError("The callback must be callable, or None.")
 
 
 class InformationAlgorithm(object):
