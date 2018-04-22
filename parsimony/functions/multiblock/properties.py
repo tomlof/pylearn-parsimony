@@ -64,10 +64,12 @@ class MultiblockGradient(with_metaclass(abc.ABCMeta, object)):
 
         Parameters
         ----------
-        x : List of numpy arrays. The weight vectors, x[index] is the point at
-                which to evaluate the gradient.
+        x : list of numpy.ndarray
+            The weight vectors, ``x[index]`` is the point at which to evaluate
+            the gradient.
 
-        index : Non-negative integer. Which variable the gradient is for.
+        index : int
+            A non-negative integer. Which block the gradient is for.
         """
         raise NotImplementedError('Abstract method "grad" must be '
                                   'specialised!')
@@ -77,21 +79,21 @@ class MultiblockGradient(with_metaclass(abc.ABCMeta, object)):
 
         Parameters
         ----------
-        x : List of numpy arrays. The weight vectors, x[index] is the point at
-                which to evaluate the gradient.
+        x : list of numpy.ndarray
+            The weight vectors, ``x[index]`` is the point at which to evaluate
+            the gradient.
 
-        index : Non-negative integer. Which variable the gradient is for.
+        index : int
+            A non-negative integer. Which block the gradient is for.
 
-        eps : Positive integer. The precision of the numerical solution.
-                Smaller is better, but too small may result in floating point
-                precision errors.
+        eps : float, optional
+            Positive float. The precision of the numerical solution. Smaller is
+            better, but too small may result in floating point precision
+            errors.
         """
         x_ = x[index]
         p = x_.shape[0]
         grad = np.zeros(x_.shape)
-#        if isinstance(self, (Penalty, Constraint)):
-#            start = self.penalty_start
-#        else:
         start = 0
         for i in range(start, p):
             x_[i, 0] -= eps
@@ -217,14 +219,21 @@ class MultiblockContinuation(with_metaclass(abc.ABCMeta, object)):
 class MultiblockStepSize(with_metaclass(abc.ABCMeta, object)):
 
     @abc.abstractmethod
-    def step(self, w, index):
+    def step(self, w, index, iteration=None):
         """The step size to use in descent methods.
 
         Parameters
         ----------
-        w : Numpy array. The point at which to determine the step size.
+        w : numpy.ndarray
+            The point at which to determine the step size.
 
-        index : Non-negative integer. The variable which the step is for.
+        index : int, optional
+            Non-negative integer. The variable which the step is for. Default
+            is 0.
+
+        iteration : int, optional
+            The current iteration number. Default is None, which means it is
+            ignored.
         """
         raise NotImplementedError('Abstract method "step" must be '
                                   'specialised!')

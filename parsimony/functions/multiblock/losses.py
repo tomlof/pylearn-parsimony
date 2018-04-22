@@ -616,7 +616,7 @@ class CombinedMultiblockFunction(mb_properties.MultiblockFunction,
 
         return proj_w
 
-    def step(self, w, index):
+    def step(self, w, index, iteration=None):
         """The step size to use in descent methods.
 
         From the interface "StepSize".
@@ -737,6 +737,38 @@ class CombinedMultiblockFunction(mb_properties.MultiblockFunction,
                                    condition_params={"c": 1e-4})
 
         return step
+
+    def apply_if_has(self, name, *args, **kwargs):
+
+        for i in range(len(self._f)):
+            fi = self._f[i]
+            for j in range(len(fi)):
+                fij = self._f[i][j]
+                for k in range(len(fij)):
+                    if hasattr(fij[k], name):
+                        name_func = getattr(fij[k], name)
+                        name_func(*args, **kwargs)
+
+        for i in range(len(self._d)):
+            di = self._d[i]
+            for k in range(len(di)):
+                if hasattr(di[k], name):
+                    name_func = getattr(di[k], name)
+                    name_func(*args, **kwargs)
+
+        for i in range(len(self._N)):
+            Ni = self._N[i]
+            for k in range(len(Ni)):
+                if hasattr(Ni[k], name):
+                    name_func = getattr(Ni[k], name)
+                    name_func(*args, **kwargs)
+
+        for i in range(len(self._p)):
+            pi = self._p[i]
+            for k in range(len(pi)):
+                if hasattr(pi[k], name):
+                    name_func = getattr(pi[k], name)
+                    name_func(*args, **kwargs)
 
 
 class MultiblockFunctionWrapper(properties.CompositeFunction,
