@@ -618,12 +618,13 @@ class StepSize(with_metaclass(abc.ABCMeta, object)):
         beta : numpy.ndarray
             The point at which to determine the step size.
 
-        index : int
+        index : int, optional
             Non-negative integer. For multiblock functions, to know which
-            variable the step is for.
+            variable the step is for. Default is 0.
 
-        iteration : int
-            The current iteration number.
+        iteration : int, optional
+            The current iteration number. Default is None, which means it is
+            ignored.
         """
         raise NotImplementedError('Abstract method "step" must be '
                                   'specialised!')

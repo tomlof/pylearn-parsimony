@@ -96,11 +96,33 @@ class MultiblockBaseTaylor(with_metaclass(abc.ABCMeta,
                                           multiblockprops.MultiblockFunction)):
     """This is the base class for all Taylor approximation functions of the
     multiblock flavour.
+
+    Parameters
+    ----------
+    function : Multiblock function.
+        A two-block function.
+
+    indices : list of int, len 2
+        The point at which the Taylor approximation is computed may be for more
+        than two blocks. These are the two indices that identifies the two
+        blocks that make up this function.
+
+    point : list of ndarray
+        The full multiblock parameter vector, split in a list where the
+        elements contain the parameters for each block. Default is None, which
+        means that the point will be set using ``at_point`` at a later time.
     """
     def __init__(self, function, indices, point=None):
 
         self.function = function
-        self.indices = [int(ind) for ind in indices]
+
+        if len(indices) != 2:
+            raise ValueError('"indices" must be a list with two positive '
+                             'ints.')
+        if indices[0] < 0 or indices[1] < 0:
+            raise ValueError('"indices" must be a list with two positive '
+                             'ints.')
+        self.indices = [int(indices[0]), int(indices[1])]
 
         self.at_point(point)
 
@@ -431,7 +453,9 @@ class FirstOrderTaylorWrapper(properties.MajoriserFunction):
 class FirstOrderTaylorApproximation(BaseTaylor,
                                     properties.Gradient,
                                     properties.LipschitzContinuousGradient,
-                                    properties.StepSize):
+                                    properties.StepSize,
+                                    properties.ProximalOperator,
+                                    properties.ProjectionOperator):
     """A first order Taylor approximation of a function around a point, a, i.e.
 
         T(x) = f(a) + <grad(f(a)) | x - a>.
@@ -519,9 +543,25 @@ class FirstOrderTaylorApproximation(BaseTaylor,
 class MultiblockFirstOrderTaylorApproximation(MultiblockBaseTaylor,
                                               multiblockprops.MultiblockGradient,
                                               multiblockprops.MultiblockLipschitzContinuousGradient):
-    """A first order Taylor approximation of a function around a point, a, i.e.
+    """A first order Taylor approximation of a two-block function around a
+    point, a, i.e.
 
         T(x) = f(a) + <grad(f(a)) | x - a>.
+
+    Parameters
+    ----------
+    function : Multiblock function.
+        A two-block function.
+
+    indices : list of int, len 2
+        The point at which the Taylor approximation is computed may be for more
+        than two blocks. These are the two indices that identifies the two
+        blocks that make up this function.
+
+    point : list of ndarray
+        The full multiblock parameter vector, split in a list where the
+        elements contain the parameters for each block. Default is None, which
+        means that the point will be set using ``at_point`` at a later time.
     """
     def __init__(self, function, indices, point=None):
 
@@ -529,7 +569,6 @@ class MultiblockFirstOrderTaylorApproximation(MultiblockBaseTaylor,
                                                                 function,
                                                                 indices,
                                                                 point=point)
-
         self.reset()
 
     def reset(self):
@@ -550,41 +589,46 @@ class MultiblockFirstOrderTaylorApproximation(MultiblockBaseTaylor,
         super(MultiblockFirstOrderTaylorApproximation, self)._precompute()
 
         if self.grad_at_point is None:
-            self.grad_at_point = [0] * len(self.indices)
-            for i in range(len(self.indices)):
+            self.grad_at_point = [0, 0]
+            for i in range(2):
                 self.grad_at_point[i] = self.function.grad(
                                                 [self.point[self.indices[0]],
                                                  self.point[self.indices[1]]],
                                                 i)
 
-    def f(self, w):
+    def f(self, x):
         """Function value.
 
-        From the interface "CompositeFunction".
+        From the interface "Function".
 
         Parameters
         ----------
-        w : numpy array (p-by-1)
+        x : list of numpy.ndarray, len 2
             The point at which to evaluate the function.
         """
         self._precompute()
 
         f = self.f_at_point
-        for i in range(len(self.indices)):
-            f = f + np.dot(self.grad_at_point[i].T,
-                           w[i] - self.point[self.indices[i]])[0, 0]
+        for i in range(2):
+            f += np.asscalar(np.dot(self.grad_at_point[i].T,
+                                    x[i] - self.point[self.indices[i]]))
 
         return f
 
-    def grad(self, w, index):
+    def grad(self, x, index):
         """Gradient of the function.
 
-        From the interface "Gradient".
+        From the interface "MultiblockGradient".
 
         Parameters
         ----------
-        w : numpy array (p-by-1)
-            The point at which to evaluate the gradient.
+        x : list of numpy.ndarray
+            The weight vectors, ``x[index]`` is the point at which to evaluate
+            the gradient. Since this is a first order approximation, the
+            gradient is constant for all ``x``.
+
+        index : int
+            A non-negative integer. Which block the gradient is for.
         """
         self._precompute()
 
@@ -592,14 +636,14 @@ class MultiblockFirstOrderTaylorApproximation(MultiblockBaseTaylor,
 
         return grad
 
-    def L(self, w, index):
+    def L(self, x, index):
         """Lipschitz constant of the gradient.
 
         From the interface "LipschitzContinuousGradient".
 
         Parameters
         ----------
-        x : numpy array (p-by-1), optional
+        x : list of numpy.ndarray, len 2
             The point at which to evaluate the Lipschitz constant.
         """
         # Any positive real number suffices, but a small one will give a larger
@@ -611,7 +655,7 @@ class MultiblockFirstOrderTaylorApproximation(MultiblockBaseTaylor,
 
         Parameters
         ----------
-        x : numpy array
+        x : list of numpy.ndarray, len 2
             The point at which to determine the step size.
         """
         return min(1.0 / self.L(x, index),
